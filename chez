@@ -33,7 +33,23 @@ function command_apply()
 
 function command_add()
 {
-  echo command_add: done
+  local option_symbolic=""
+  local file_path=""
+  local group=""
+
+  # Parse command line arguments
+  shift
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "-s" ]]; then
+      option_symbolic="yes"
+    elif [[ -z "$file_path" ]]; then
+      file_path=$1
+    else
+      group=$1
+    fi
+    shift
+  done
+
   exit 0
 }
 
