@@ -1,0 +1,71 @@
+#!/bin/bash
+# Copyright (C) 2026 Zoran Loncarevic
+
+arg0=${0##*/}
+
+function usage() {
+  echo "Usage: $arg0 [options] command ..."
+  exit 0
+}
+
+function version() {
+  echo "$arg0 version 0.1"
+  exit 0
+}
+
+function command_diff()
+{
+  echo command_diff: done
+  exit 0
+}
+
+function command_git()
+{
+  echo command_git: done
+  exit 0
+}
+
+function command_apply()
+{
+  echo command_apply: done
+  exit 0
+}
+
+function command_add()
+{
+  echo command_add: done
+  exit 0
+}
+
+function perror_unknown_option_or_command()
+{
+  if [[ "$1" == -* ]]; then
+    echo "$arg0: Unknown option $1."
+  else
+    echo "$arg0: Unknown command $1."
+  fi
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -h|--help)
+      usage   ;;
+    --version)
+      version ;;
+    add)
+      command_add "$@"    ;;
+    apply)
+      command_apply "$@"  ;;
+    diff)
+      command_diff "$@"   ;;
+    git)
+      shift
+      command_git "$@"    ;;
+    status) ;&
+    commit)
+      command_git "$@"    ;;
+    *) perror_unknown_option_or_command "$1" ;;
+  esac
+  shift
+done
