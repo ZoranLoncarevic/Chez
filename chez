@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Zoran Loncarevic
 
 arg0=${0##*/}
+: "${REPOSITORY_DIR:=$HOME/Projects/Chez/Repository}"
 
 function usage() {
   echo "Usage: $arg0 [options] command ..."
@@ -11,6 +12,11 @@ function usage() {
 function version() {
   echo "$arg0 version 0.1"
   exit 0
+}
+
+function perror() {
+  echo $1
+  exit 1
 }
 
 function command_diff()
@@ -31,6 +37,22 @@ function command_apply()
   exit 0
 }
 
+function ensure_repository_exists()
+{
+  if [[ ! -d "$REPOSITORY_DIR/.git" ]]; then
+    mkdir -p "$REPOSITORY_DIR" ||
+      perror "Error creating repository directory $REPOSITORY_DIR"
+    (cd "$REPOSITORY_DIR"
+     mkdir -p Files
+     mkdir -p Groups
+     touch Files/.gitkeep Groups/.gitkeep
+     git init
+     echo "Chez v0.1 source repository" > .git/description
+     git add Files/.gitkeep Groups/.gitkeep
+     git commit -m "Initiating repository")
+  fi
+}
+
 function command_add()
 {
   local option_symbolic=""
@@ -49,6 +71,8 @@ function command_add()
     fi
     shift
   done
+
+  ensure_repository_exists
 
   exit 0
 }
