@@ -53,6 +53,15 @@ function ensure_repository_exists()
   fi
 }
 
+function perror_file_points_to_repository()
+{
+  echo "'$1' points into or is in the repository."
+  # TODO: After implementing conversion to repository filename
+  # add a warning "This link is not managed by Chez" if the
+  # link target does not correspond to source file.
+  exit 1
+}
+
 function command_add()
 {
   local option_symbolic=""
@@ -73,6 +82,19 @@ function command_add()
   done
 
   ensure_repository_exists
+
+  # Report error if file is in the repository or doesn't exists
+  if [[ "$(realpath "$file_path")" == "${REPOSITORY_DIR}"* ]]; then
+    perror_file_points_to_repository "$file_path"
+  fi
+
+  if [[ ! -e "$file_path" ]]; then
+    perror "'$file_path' does not exists."
+  fi
+
+  if [[ ! -r "$file_path" ]]; then
+    perror "'$file_path' is not readable."
+  fi
 
   exit 0
 }
