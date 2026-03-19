@@ -19,6 +19,16 @@ function perror() {
   exit 1
 }
 
+function system_to_repository()
+{
+  local repository=${1/#$HOME//HOME}
+
+  repository=${repository///dot_//literal_dot_}
+  repository=${repository///.//dot_}
+
+  echo $repository
+}
+
 function command_diff()
 {
   echo command_diff: done
@@ -70,7 +80,10 @@ function add_file_to_repository()
   fi
 
   if [[ -f "$1" ]]; then
-    echo "$1 is regular file"
+    destination_filename=$(system_to_repository "$1")
+    mkdir -p "${REPOSITORY_DIR}/Files${destination_filename%/*}"
+    cp "$1" "${REPOSITORY_DIR}/Files${destination_filename}"
+    git -C "${REPOSITORY_DIR}" add "Files${destination_filename}"
   elif [[ -d "$1" ]]; then
     echo "$1 is directory"
   else
