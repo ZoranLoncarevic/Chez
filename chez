@@ -82,8 +82,12 @@ function add_file_to_repository()
   if [[ -f "$1" ]]; then
     destination_filename=$(system_to_repository "$1")
     mkdir -p "${REPOSITORY_DIR}/Files${destination_filename%/*}"
-    cp "$1" "${REPOSITORY_DIR}/Files${destination_filename}"
+    cp "$1" "${REPOSITORY_DIR}/Files${destination_filename}" || return 1
     git -C "${REPOSITORY_DIR}" add "Files${destination_filename}"
+    if [[ "$option_symbolic" == "yes" ]]; then
+      rm "$1"
+      ln -s "${REPOSITORY_DIR}/Files${destination_filename}"
+    fi
   elif [[ -d "$1" ]]; then
     echo "$1 is directory"
   else
