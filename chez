@@ -29,6 +29,16 @@ function system_to_repository()
   echo $repository
 }
 
+function for_each_found_file_do()
+{
+  local callback=$1
+  shift
+
+  while IFS= read -r -d '' file; do
+    "$callback" "$file"
+  done < <(find "$@" -print0)
+}
+
 function command_diff()
 {
   echo command_diff: done
