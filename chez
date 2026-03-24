@@ -108,6 +108,33 @@ function add_file_to_repository()
   return 0
 }
 
+function record_attributes_if_necessary()
+{
+  local attribute
+  local relevant_attributes=(symbolic test)
+  local path="${REPOSITORY_DIR}/Files$(system_to_repository "$1")"
+
+  if [[ -d "$path" ]]; then
+    path=$path/.chez_test_gitattributes
+  fi
+
+  git -C "${REPOSITORY_DIR}" check-attr "${relevant_attributes[@]}" -- $path |
+  cut -d: -f2- |
+  while IFS=: read -r attribute value; do
+    option_value="option_${attribute# }"
+    if [[ "$value" == " set" && "${!option_value}" != "yes" ]] ||
+       [[ "$value" != " set" && "${!option_value}" == "yes" ]]; then
+      [[ "$value" == " set" ]] && sign_prefix="-" || sign_prefix=""
+      if [[ -d "$1" ]]; then
+        echo "* $sign_prefix${attribute# }" >> "${path%/*}/.gitattributes"
+      else
+        echo "/${path##*/} $sign_prefix${attribute# }" >> "${path%/*}/.gitattributes"
+      fi
+      git -C "${REPOSITORY_DIR}" add "${path%/*}/.gitattributes"
+    fi
+  done
+}
+
 function command_add()
 {
   local option_symbolic=""
@@ -144,8 +171,10 @@ function command_add()
     perror "'$file_path' is not readable."
   fi
 
-  add_file_to_repository "$(realpath -s "$file_path")"
-  exit 0
+  local absolute_path=$(realpath -s "$file_path")
+  add_file_to_repository "$absolute_path" &&
+  record_attributes_if_necessary "$absolute_path"
+  exit $?
 }
 
 function perror_unknown_option_or_command()
