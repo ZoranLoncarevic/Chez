@@ -158,6 +158,11 @@ function command_add()
 
   ensure_repository_exists
 
+  # Report error if no path specified
+  if [[ -z "$file_path" ]]; then
+    perror "No path specified!"
+  fi
+
   # Report error if file is in the repository or doesn't exists
   if [[ "$(realpath "$file_path")" == "${REPOSITORY_DIR}"* ]]; then
     perror_file_points_to_repository "$file_path"
