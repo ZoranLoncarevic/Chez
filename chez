@@ -16,7 +16,9 @@ function version() {
 
 function perror() {
   echo $1
-  exit 1
+  if [[ "$2" != "non-fatal" ]]; then
+    exit 1
+  fi
 }
 
 function system_to_repository()
@@ -79,7 +81,6 @@ function perror_file_points_to_repository()
   # TODO: After implementing conversion to repository filename
   # add a warning "This link is not managed by Chez" if the
   # link target does not correspond to source file.
-  exit 1
 }
 
 function add_file_to_repository()
@@ -135,11 +136,43 @@ function record_attributes_if_necessary()
   done
 }
 
+function add_single_path()
+{
+  ensure_repository_exists
+
+  # Report error if no path specified
+  if [[ -z "$1" ]]; then
+    perror "No path specified!" non-fatal
+    return 1
+  fi
+
+  # Report error if file is in the repository or doesn't exists
+  if [[ "$(realpath "$1")" == "${REPOSITORY_DIR}"* ]]; then
+    perror_file_points_to_repository "$1"
+    return 1
+  fi
+
+  if [[ ! -e "$1" ]]; then
+    perror "'$1' does not exists." non-fatal
+    return 1
+  fi
+
+  if [[ ! -r "$1" ]]; then
+    perror "'$1' is not readable." non-fatal
+    return 1
+  fi
+
+  local absolute_path=$(realpath -s "$1")
+  add_file_to_repository "$absolute_path" &&
+  record_attributes_if_necessary "$absolute_path"
+  return $?
+}
+
 function command_add()
 {
   local option_symbolic=""
-  local file_path=""
   local group=""
+  local success_cnt=0 failure_cnt=0
 
   # Parse command line arguments
   shift
@@ -148,37 +181,28 @@ function command_add()
       option_symbolic="yes"
     elif [[ "$1" == "-L" || "$1" == "--follow-link" ]]; then
       option_follow_link="yes"
-    elif [[ -z "$file_path" ]]; then
-      file_path=$1
+    elif [[ "$1" == "-g" || "$1" == "--group" ]]; then
+      shift
+      if [[ -z "$1" || "$1" == -* ]]; then
+        perror "option -g is missing required argument"
+      else
+        group=$1
+      fi
+    elif [[ "$1" != -* ]]; then
+      add_single_path "$1" && (( ++success_cnt )) || (( ++failure_cnt ))
     else
-      group=$1
+      perror "unknown option $1"
     fi
     shift
   done
 
-  ensure_repository_exists
-
-  # Report error if no path specified
-  if [[ -z "$file_path" ]]; then
-    perror "No path specified!"
-  fi
-
-  # Report error if file is in the repository or doesn't exists
-  if [[ "$(realpath "$file_path")" == "${REPOSITORY_DIR}"* ]]; then
-    perror_file_points_to_repository "$file_path"
-  fi
-
-  if [[ ! -e "$file_path" ]]; then
-    perror "'$file_path' does not exists."
-  fi
-
-  if [[ ! -r "$file_path" ]]; then
-    perror "'$file_path' is not readable."
-  fi
-
-  local absolute_path=$(realpath -s "$file_path")
-  add_file_to_repository "$absolute_path" &&
-  record_attributes_if_necessary "$absolute_path"
+  if (( $success_cnt == 0 )) && (( $failure_cnt == 0 )); then
+    perror "no path specified!"
+  elif (( $failure_cnt > 0 && $failure_cnt+$success_cnt > 1)); then
+    echo "$((success_cnt+failure_cnt)) paths processed: $success_cnt success(es), $failure_cnt failure(s)"
+  fi                                       #
+                                           #
+  (( failure_cnt == 0 ))
   exit $?
 }
 
