@@ -206,6 +206,27 @@ function command_add()
   exit $?
 }
 
+function command_add_check_options()
+{
+  shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -g|--group)
+        shift
+	if [[ -z "$1" || "$1" == -* ]]; then
+          perror "option -g is missing required argument"
+	fi ;;
+      -s) ;&
+      -L|--follow-link) : ;;
+      *)
+        if [[ "$1" == -* ]]; then
+          perror "unknown option $1"
+	fi ;;
+    esac
+    shift
+  done
+}
+
 function perror_unknown_option_or_command()
 {
   if [[ "$1" == -* ]]; then
@@ -227,6 +248,7 @@ while [[ $# -gt 0 ]]; do
     -L|--follow-link)
       option_follow_link="yes" ;;
     add)
+      command_add_check_options "$@"
       command_add "$@"    ;;
     apply)
       command_apply "$@"  ;;
