@@ -179,6 +179,8 @@ function command_add()
   while [[ $# -gt 0 ]]; do
     if [[ "$1" == "-s" ]]; then
       option_symbolic="yes"
+    elif [[ "$1" == "-c" || "$1" == "--copy" ]]; then
+      option_symbolic="no"
     elif [[ "$1" == "-L" || "$1" == "--follow-link" ]]; then
       option_follow_link="yes"
     elif [[ "$1" == "-g" || "$1" == "--group" ]]; then
@@ -217,6 +219,7 @@ function command_add_check_options()
           perror "option -g is missing required argument"
 	fi ;;
       -s) ;&
+      -c) ;&
       -L|--follow-link) : ;;
       *)
         if [[ "$1" == -* ]]; then
