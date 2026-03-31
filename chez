@@ -55,7 +55,25 @@ function command_git()
 
 function apply_single_path()
 {
-  echo "Applying $1..."
+  local expanded_path=${1/#:/$REPOSITORY_DIR/Groups/}
+        expanded_path=$(realpath -s "$expanded_path")
+
+  if [[ "$expanded_path" != "$REPOSITORY_DIR"* ]]; then
+    expanded_path=${REPOSITORY_DIR}/Files$(system_to_repository "$expanded_path")
+  fi
+
+  if [[ ! -e "$expanded_path" ]]; then
+    perror "$1 does not exist in repository" non-fatal
+    return 1
+  fi
+
+  if [[ "$expanded_path" == "$REPOSITORY_DIR/Groups/" ]] &&
+     [[ ! -h "$expanded_path" ]]; then
+    perror "$1 is not a file that can be applied" non-fatal
+    return 1
+  fi
+
+  echo "Applying $expanded_path..."
   return 0
 }
 
