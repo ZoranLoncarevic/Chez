@@ -65,6 +65,7 @@ function for_each_found_file_with_options_slurped_do()
 {
   local file attribute value line
   local prev_file=""
+  local failure_cnt=0
 
   local callback=$1
   shift
@@ -83,7 +84,7 @@ function for_each_found_file_with_options_slurped_do()
       file="${line%:*}"
 
       if [[ "$file" != "$prev_file" && ! -z "$prev_file" ]]; then
-        "$callback" "$prev_file"
+        "$callback" "$prev_file" || (( ++failure_cnt ))
         restore_options "${relevant_attributes[@]}"
       fi
 
@@ -93,7 +94,10 @@ function for_each_found_file_with_options_slurped_do()
         printf -v "$option_variable" "yes"
       fi
     done
-    "$callback" "$prev_file" )
+    "$callback" "$prev_file" || (( ++failure_cnt ))
+    (( failure_cnt == 0 ))
+    exit $? )
+  return $?
 }
 
 function command_diff()
