@@ -21,6 +21,26 @@ function perror() {
   fi
 }
 
+function save_options()
+{
+  local option_var
+  while [[ $# -gt 0 ]]; do
+    option_var="option_$1"
+    printf -v "saved_$option_var" "%s" "${!option_var}"
+    shift
+  done
+}
+
+function restore_options()
+{
+  local option_var
+  while [[ $# -gt 0 ]]; do
+    option_var="saved_option_$1"
+    printf -v "option_$1" "%s" "${!option_var}"
+    shift
+  done
+}
+
 function system_to_repository()
 {
   local repository=${1/#$HOME//HOME}
@@ -41,6 +61,41 @@ function for_each_found_file_do()
   done < <(find "$@" -print0)
 }
 
+function for_each_found_file_with_options_slurped_do()
+{
+  local file attribute value line
+  local prev_file=""
+
+  local callback=$1
+  shift
+
+  local relevant_attributes=(symbolic test)
+  save_options "${relevant_attributes[@]}"
+
+  local excluded_files="! -name .gitkeep ! -name .gitattributes"
+  find "$@" $excluded_files |
+  git -C "${REPOSITORY_DIR}" check-attr --stdin "${relevant_attributes[@]}" |
+  ( while IFS=: read -r line; do
+      # Split the line we read into fields using ':' as delimiter
+      value="${line##*: }"
+      line="${line%:*}"
+      attribute="${line##*: }"
+      file="${line%:*}"
+
+      if [[ "$file" != "$prev_file" && ! -z "$prev_file" ]]; then
+        "$callback" "$prev_file"
+        restore_options "${relevant_attributes[@]}"
+      fi
+
+      prev_file=$file
+      option_variable=option_$attribute
+      if [[ -z "${!option_variable}" && "$value" == "set" ]]; then
+        printf -v "$option_variable" "yes"
+      fi
+    done
+    "$callback" "$prev_file" )
+}
+
 function command_diff()
 {
   echo command_diff: done
@@ -51,6 +106,11 @@ function command_git()
 {
   echo command_git: done
   exit 0
+}
+
+function apply_single_file()
+{
+  echo Applying $1, symbolic=$option_symbolic
 }
 
 function apply_single_path()
@@ -67,14 +127,20 @@ function apply_single_path()
     return 1
   fi
 
-  if [[ "$expanded_path" == "$REPOSITORY_DIR/Groups/" ]] &&
-     [[ ! -h "$expanded_path" ]]; then
-    perror "$1 is not a file that can be applied" non-fatal
-    return 1
+  if [[ "$expanded_path" == "$REPOSITORY_DIR/Groups/"* ]]; then
+    if [[ -d "$expanded_path" ]]; then
+      for_each_found_file_with_options_slurped_do apply_single_file "$expanded_path" -type l -exec readlink -f {} +
+    elif [[ -h "$expanded_path" ]]; then
+      for_each_found_file_with_options_slurped_do apply_single_file "$(realpath $expanded_path)"
+    else
+      perror "$1 is not a file that can be applied" non-fatal
+      return 1
+    fi
+  else
+    for_each_found_file_with_options_slurped_do apply_single_file "$expanded_path" -type f
   fi
 
-  echo "Applying $expanded_path..."
-  return 0
+  return $?
 }
 
 function command_apply()
