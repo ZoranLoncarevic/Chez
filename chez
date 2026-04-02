@@ -3,6 +3,7 @@
 
 arg0=${0##*/}
 : "${REPOSITORY_DIR:=$HOME/Projects/Chez/Repository}"
+connected_to_terminal=$([[ -t 0 ]] && echo yes || echo no)
 
 function usage() {
   echo "Usage: $arg0 [options] command ..."
@@ -49,6 +50,16 @@ function system_to_repository()
   repository=${repository///.//dot_}
 
   echo $repository
+}
+
+function repository_to_system()
+{
+  local system=${1#$REPOSITORY_DIR/Files}
+
+  system=${system/#\/HOME\//$HOME\/}
+  system=${system///dot_//.}
+  system=${system///literal_//}
+  echo $system
 }
 
 function for_each_found_file_do()
@@ -112,8 +123,47 @@ function command_git()
   exit 0
 }
 
+function prompt_user_whether_to_overwrite()
+{
+  [[ "$connected_to_terminal" == "no" ]] && return 1
+  local response
+  while true; do
+    echo -n "$2 already exists. Overwrite? [y,n,q,d,a]: " > /dev/tty
+    read -r response < /dev/tty
+    case "$response" in
+      y) return 0 ;;
+      n) return 1 ;;
+      q) exit 1   ;;
+      d) git diff --no-index "$1" "$2" ;;
+      a) user_override_overwrite="always"
+         return 0 ;;
+    esac
+  done
+}
+
+function is_overwrite_allowed()
+{
+  [[ "$user_override_overwrite" == "always" ]] && return 0;
+
+  case "$option_overwrite" in
+    yes) ;&
+    always) return 0 ;;
+    prompt) prompt_user_whether_to_overwrite "$1" "$2" ;;
+    *) return 1;;
+  esac
+}
+
 function apply_single_file()
 {
+  local destination=$(repository_to_system "$1")
+
+  if [[ -e "$destination" ]]; then
+    if ! is_overwrite_allowed "$1" "$destination"; then
+      echo "Skipping $1: already exist"
+      return 0
+    fi
+  fi
+
   echo Applying $1, symbolic=$option_symbolic
 }
 
@@ -130,6 +180,8 @@ function apply_single_path()
     perror "$1 does not exist in repository" non-fatal
     return 1
   fi
+
+  user_override_overwrite=""
 
   if [[ "$expanded_path" == "$REPOSITORY_DIR/Groups/"* ]]; then
     if [[ -d "$expanded_path" ]]; then
@@ -150,6 +202,7 @@ function apply_single_path()
 function command_apply()
 {
   local option_symbolic=""
+  local option_overwrite=""
   local option_force=""
   local success_cnt=0 failure_cnt=0
 
@@ -161,6 +214,14 @@ function command_apply()
       option_symbolic="no"
     elif [[ "$1" == "-f" || "$1" == "--force" ]]; then
       option_force="yes"
+    elif [[ "$1" == "-o" || "$1" == "--overwrite" ]]; then
+      option_overwrite="yes"
+    elif [[ "$1" == "-op" || "$1" == "--overwrite=prompt" ]]; then
+      option_overwrite="prompt"
+    elif [[ "$1" == "--overwrite=always" ]]; then
+      option_overwrite="always"
+    elif [[ "$1" == "--overwrite=never" ]]; then
+      option_overwrite="never"
     elif [[ "$1" != -* ]]; then
       apply_single_path "$1" && (( ++success_cnt )) || (( ++failure_cnt ))
     else
@@ -186,6 +247,10 @@ function command_apply_check_options()
     case "$1" in
       -s) ;&
       -c) ;&
+      -o|--overwrite) ;&
+      --overwrite=always) ;&
+      --overwrite=never)  ;&
+      --overwrite=prompt|-op) ;&
       -f|--force) : ;;
       *)
         if [[ "$1" == -* ]]; then
