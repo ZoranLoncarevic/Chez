@@ -171,7 +171,13 @@ function apply_single_file()
     fi
   fi
 
-  echo Applying $1, symbolic=$option_symbolic
+  if [[ "$option_symbolic" == "yes" ]]; then
+    verbose_message "Linking $1 to $destination"
+    ln -sfn "$1" "$destination"
+  else
+    verbose_message "Copying $1 to $destination"
+    cp "$1" "$destination"
+  fi
 }
 
 function apply_single_path()
