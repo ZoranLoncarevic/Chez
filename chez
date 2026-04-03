@@ -49,6 +49,11 @@ function restore_options()
   done
 }
 
+function is_this_a_dry_run()
+{
+  [[ "$option_dry_run" == "yes" ]]
+}
+
 function system_to_repository()
 {
   local repository=${1/#$HOME//HOME}
@@ -173,9 +178,11 @@ function apply_single_file()
 
   if [[ "$option_symbolic" == "yes" ]]; then
     verbose_message "Linking $1 to $destination"
+    is_this_a_dry_run ||
     ln -sfn "$1" "$destination"
   else
     verbose_message "Copying $1 to $destination"
+    is_this_a_dry_run ||
     cp "$1" "$destination"
   fi
 }
@@ -238,6 +245,8 @@ function command_apply()
       option_overwrite="never"
     elif [[ "$1" == "-v" || "$1" == "--verbose" ]]; then
       option_verbose="yes"
+    elif [[ "$1" == "-n" || "$1" == "--dry-run" ]]; then
+      option_dry_run="yes"
     elif [[ "$1" != -* ]]; then
       apply_single_path "$1" && (( ++success_cnt )) || (( ++failure_cnt ))
     else
@@ -268,6 +277,7 @@ function command_apply_check_options()
       --overwrite=never)  ;&
       --overwrite=prompt|-op) ;&
       -v|--verbose) ;&
+      -n|--dry_run) ;&
       -f|--force) : ;;
       *)
         if [[ "$1" == -* ]]; then
@@ -312,13 +322,15 @@ function add_file_to_repository()
 
   if [[ -f "$1" ]]; then
     destination_filename=$(system_to_repository "$1")
-    mkdir -p "${REPOSITORY_DIR}/Files${destination_filename%/*}"
-    cp "$1" "${REPOSITORY_DIR}/Files${destination_filename}" || return 1
-    git -C "${REPOSITORY_DIR}" add "Files${destination_filename}"
+    is_this_a_dry_run ||
+    { mkdir -p "${REPOSITORY_DIR}/Files${destination_filename%/*}"
+      cp "$1" "${REPOSITORY_DIR}/Files${destination_filename}" || return 1
+      git -C "${REPOSITORY_DIR}" add "Files${destination_filename}"; }
     verbose_message "Copying $1 to repository"
     if [[ "$option_symbolic" == "yes" ]]; then
-      rm "$1"
-      ln -s "${REPOSITORY_DIR}/Files${destination_filename}" "$1"
+      is_this_a_dry_run ||
+      { rm "$1"
+        ln -s "${REPOSITORY_DIR}/Files${destination_filename}" "$1"; }
       verbose_message "Replacing $1 with symbolic link to repository"
     fi
   elif [[ -d "$1" ]]; then
@@ -348,12 +360,15 @@ function record_attributes_if_necessary()
     if [[ "$value" == " set" && "${!option_value}" != "yes" ]] ||
        [[ "$value" != " set" && "${!option_value}" == "yes" ]]; then
       [[ "$value" == " set" ]] && sign_prefix="-" || sign_prefix=""
-      if [[ -d "$1" ]]; then
-        echo "* $sign_prefix${attribute# }" >> "${path%/*}/.gitattributes"
-      else
-        echo "/${path##*/} $sign_prefix${attribute# }" >> "${path%/*}/.gitattributes"
+      verbose_message "Recording attribute $sign_prefix${attribute# } for $path"
+      if [[ "$option_dry_run" != "yes" ]]; then
+        if [[ -d "$1" ]]; then
+          echo "* $sign_prefix${attribute# }" >> "${path%/*}/.gitattributes"
+        else
+          echo "/${path##*/} $sign_prefix${attribute# }" >> "${path%/*}/.gitattributes"
+        fi
+        git -C "${REPOSITORY_DIR}" add "${path%/*}/.gitattributes"
       fi
-      git -C "${REPOSITORY_DIR}" add "${path%/*}/.gitattributes"
     fi
   done
 }
@@ -408,6 +423,8 @@ function command_add()
       option_follow_link="yes"
     elif [[ "$1" == "-v" || "$1" == "--verbose" ]]; then
       option_verbose="yes"
+    elif [[ "$1" == "-n" || "$1" == "--dry-run" ]]; then
+      option_dry_run="yes"
     elif [[ "$1" == "-g" || "$1" == "--group" ]]; then
       shift
       if [[ -z "$1" || "$1" == -* ]]; then
@@ -446,6 +463,7 @@ function command_add_check_options()
       -s) ;&
       -c) ;&
       -v|--verbose) ;&
+      -n|--dry-run) ;&
       -L|--follow-link) : ;;
       *)
         if [[ "$1" == -* ]]; then
@@ -468,6 +486,7 @@ function perror_unknown_option_or_command()
 
 option_follow_link=""
 option_verbose=""
+option_dry_run=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -477,6 +496,8 @@ while [[ $# -gt 0 ]]; do
       version ;;
     -v|--verbose)
       option_verbose="yes" ;;
+    -n|--dry-run)
+      option_dry_run="yes" ;;
     -L|--follow-link)
       option_follow_link="yes" ;;
     add)
