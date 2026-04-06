@@ -190,7 +190,7 @@ function apply_single_file()
 function apply_single_path()
 {
   local expanded_path=${1/#:/$REPOSITORY_DIR/Groups/}
-        expanded_path=$(realpath -s "$expanded_path")
+        expanded_path=$(realpath -s -- "$expanded_path")
 
   if [[ "$expanded_path" != "$REPOSITORY_DIR"* ]]; then
     expanded_path=${REPOSITORY_DIR}/Files$(system_to_repository "$expanded_path")
@@ -208,7 +208,7 @@ function apply_single_path()
     if [[ -d "$expanded_path" ]]; then
       for_each_found_file_with_options_slurped_do apply_single_file "$expanded_path" -type l -exec readlink -f {} +
     elif [[ -h "$expanded_path" ]]; then
-      for_each_found_file_with_options_slurped_do apply_single_file "$(realpath $expanded_path)"
+      for_each_found_file_with_options_slurped_do apply_single_file "$(realpath -- $expanded_path)"
     else
       perror "$1 is not a file that can be applied" non-fatal
       return 1
@@ -384,7 +384,7 @@ function add_single_path()
   fi
 
   # Report error if file is in the repository or doesn't exists
-  if [[ "$(realpath "$1")" == "${REPOSITORY_DIR}"* ]]; then
+  if [[ "$(realpath -- "$1")" == "${REPOSITORY_DIR}"* ]]; then
     perror_file_points_to_repository "$1"
     return 1
   fi
@@ -399,7 +399,7 @@ function add_single_path()
     return 1
   fi
 
-  local absolute_path=$(realpath -s "$1")
+  local absolute_path=$(realpath -s -- "$1")
   verbose_message "Adding $absolute_path to repository..."
   add_file_to_repository "$absolute_path" &&
   record_attributes_if_necessary "$absolute_path"
