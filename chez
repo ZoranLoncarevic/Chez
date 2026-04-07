@@ -135,6 +135,109 @@ function command_git()
   exit 0
 }
 
+function command_chattr()
+{
+  local failure_cnt=0
+  local expect_file=""
+  local line attribute file
+  shift
+
+  # Collect attributes and files from command line
+  local attributes=()
+  local files=()
+  while [[ $# -gt 0 ]]; do
+    [[ $# -eq 1 ]] && expect_file="yes"
+    if [[ "$expect_file" == "yes" ]]; then
+      files+=("$1")
+    elif [[ "$1" == "--" ]]; then
+      expect_file="yes"
+    else
+      attributes+=("$1")
+    fi
+    shift
+  done
+
+  if (( ${#attributes[@]} == 0 )) ||
+     (( ${#files[@]} == 0 )); then
+    perror "chattr: must specify at least one attribute and one file"
+  fi
+
+  # Prepare list of files
+  local i
+  for i in "${!files[@]}"; do
+    local path=$(realpath -s -- "${files[i]}")
+
+    if [[ "$path" != "$REPOSITORY_DIR"* ]]; then
+      path=${REPOSITORY_DIR}/Files$(system_to_repository "$path")
+    fi
+
+    if [[ ! -e "$path" ]]; then
+      perror "${files[i]} does not exist in repository" non-fatal
+      unset 'files[i]'
+      (( ++failure_cnt ))
+      continue
+    fi
+
+    if [[ -d "$path" ]]; then
+      path=$path/.chez_test_gitattributes
+    fi
+
+    files[i]="$path"
+  done
+
+  # Prepare attributes
+  local attr value a
+  declare -A attribute_map
+  for i in "${!attributes[@]}"; do
+    a=${attributes[i]}
+    attr=${a#+}
+    attr=${attr#-}
+    attr=${attr%%=*}
+    if [[ "$a" == +* ]]; then
+      value="set"
+    elif [[ "$a" == -* ]]; then
+      value="unset"
+    elif [[ "$a" == *=* ]]; then
+      value=${a#*=}
+    else
+      value="set"
+    fi
+    attribute_map[$attr]="$value"
+  done
+
+  git -C "${REPOSITORY_DIR}" check-attr "${!attribute_map[@]}" -- "${files[@]}" |
+  while IFS=: read -r line; do
+    # Split the line into fields using ':' as delimiter
+    value="${line##*: }"
+    line="${line%:*}"
+    attribute="${line##*: }"
+    file="${line%:*}"
+    if [[ "${attribute_map[$attribute]}" == "$value" ]] ||
+       [[ "${attribute_map[$attribute]}" == "unset"  &&
+          "$value" == "unspecified" ]]; then
+      verbose_message "$file: $attribute already set to ${attribute_map[$attribute]}"
+    else
+      verbose_message "$file: setting $attribute to ${attribute_map[$attribute]}"
+      if [[ "$option_dry_run" != "yes" ]]; then
+	case "${attribute_map[$attribute]}" in
+	  set)   value="$attribute"    ;;
+	  unset) value="-$attribute"   ;;
+	  *)     value="$attribute=${attribute_map[$attribute]}" ;;
+	esac
+	if [[ "$file" == */.chez_test_gitattributes ]]; then
+          echo "* $value" >> "${file%/*}/.gitattributes"
+	else
+          echo "/${file##*/} $value" >> "${file%/*}/.gitattributes"
+	fi
+        git -C "${REPOSITORY_DIR}" add "${file%/*}/.gitattributes"
+      fi
+    fi
+  done
+
+  (( failure_cnt == 0 ))
+  exit
+}
+
 function prompt_user_whether_to_overwrite()
 {
   [[ "$connected_to_terminal" == "no" ]] && return 1
@@ -514,6 +617,8 @@ while [[ $# -gt 0 ]]; do
     status) ;&
     commit)
       command_git "$@"    ;;
+    chattr)
+      command_chattr "$@" ;;
     *) perror_unknown_option_or_command "$1" ;;
   esac
   shift
