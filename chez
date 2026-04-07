@@ -93,7 +93,7 @@ function for_each_found_file_with_options_slurped_do()
   local callback=$1
   shift
 
-  local relevant_attributes=(symbolic test)
+  local relevant_attributes=(symbolic sudo test)
   save_options "${relevant_attributes[@]}"
 
   local excluded_files="! -name .gitkeep ! -name .gitattributes"
@@ -279,14 +279,20 @@ function apply_single_file()
     fi
   fi
 
+  local sudo_prefix="" sudo_message=""
+  if [[ "$option_sudo" == "yes" ]]; then
+    sudo_prefix="sudo"
+    sudo_message="with sudo"
+  fi
+
   if [[ "$option_symbolic" == "yes" ]]; then
-    verbose_message "Linking $1 to $destination"
+    verbose_message "Linking $1 to $destination $sudo_message"
     is_this_a_dry_run ||
-    ln -sfn "$1" "$destination"
+    $sudo_prefix ln -sfn "$1" "$destination"
   else
-    verbose_message "Copying $1 to $destination"
+    verbose_message "Copying $1 to $destination $sudo_message"
     is_this_a_dry_run ||
-    cp "$1" "$destination"
+    $sudo_prefix cp "$1" "$destination"
   fi
 }
 
@@ -327,6 +333,7 @@ function command_apply()
 {
   local option_symbolic=""
   local option_overwrite=""
+  local option_sudo=""
   local option_force=""
   local success_cnt=0 failure_cnt=0
 
@@ -346,6 +353,10 @@ function command_apply()
       option_overwrite="always"
     elif [[ "$1" == "--overwrite=never" ]]; then
       option_overwrite="never"
+    elif [[ "$1" == "--sudo" ]]; then
+      option_sudo="yes"
+    elif [[ "$1" == "--nosudo" ]]; then
+      option_sudo="no"
     elif [[ "$1" == "-v" || "$1" == "--verbose" ]]; then
       option_verbose="yes"
     elif [[ "$1" == "-n" || "$1" == "--dry-run" ]]; then
@@ -381,6 +392,8 @@ function command_apply_check_options()
       --overwrite=prompt|-op) ;&
       -v|--verbose) ;&
       -n|--dry_run) ;&
+      --sudo)   ;&
+      --nosudo) ;&
       -f|--force) : ;;
       *)
         if [[ "$1" == -* ]]; then
@@ -416,6 +429,15 @@ function perror_file_points_to_repository()
   # link target does not correspond to source file.
 }
 
+function is_sudo_necessary_for()
+{
+  if [[ "$option_symbolic" == "yes" ]]; then
+    [[ ! -w "${1%/*}" ]]
+  else
+    [[ ! -w "$1" ]]
+  fi
+}
+
 function add_file_to_repository()
 {
   if [[ -L "$1" && ! "$option_follow_link" == "yes" ]]; then
@@ -443,13 +465,17 @@ function add_file_to_repository()
     return 1
   fi
 
+  if is_sudo_necessary_for "$1"; then
+    option_sudo="yes"
+  fi
+
   return 0
 }
 
 function record_attributes_if_necessary()
 {
   local attribute
-  local relevant_attributes=(symbolic test)
+  local relevant_attributes=(symbolic sudo test)
   local path="${REPOSITORY_DIR}/Files$(system_to_repository "$1")"
 
   if [[ -d "$path" ]]; then
@@ -502,16 +528,19 @@ function add_single_path()
     return 1
   fi
 
+  local saved_option_sudo=$option_sudo
   local absolute_path=$(realpath -s -- "$1")
   verbose_message "Adding $absolute_path to repository..."
   add_file_to_repository "$absolute_path" &&
   record_attributes_if_necessary "$absolute_path"
+  option_sudo=$saved_option_sudo
   return $?
 }
 
 function command_add()
 {
   local option_symbolic=""
+  local option_sudo=""
   local group=""
   local success_cnt=0 failure_cnt=0
 
@@ -522,6 +551,10 @@ function command_add()
       option_symbolic="yes"
     elif [[ "$1" == "-c" || "$1" == "--copy" ]]; then
       option_symbolic="no"
+    elif [[ "$1" == "--sudo" ]]; then
+      option_sudo="yes"
+    elif [[ "$1" == "--nosudo" ]]; then
+      option_sudo="no"
     elif [[ "$1" == "-L" || "$1" == "--follow-link" ]]; then
       option_follow_link="yes"
     elif [[ "$1" == "-v" || "$1" == "--verbose" ]]; then
@@ -567,6 +600,8 @@ function command_add_check_options()
       -c) ;&
       -v|--verbose) ;&
       -n|--dry-run) ;&
+      --sudo)   ;&
+      --nosudo) ;&
       -L|--follow-link) : ;;
       *)
         if [[ "$1" == -* ]]; then
