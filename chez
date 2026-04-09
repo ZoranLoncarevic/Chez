@@ -93,7 +93,7 @@ function for_each_found_file_with_options_slurped_do()
   local callback=$1
   shift
 
-  local relevant_attributes=(symbolic sudo test)
+  local relevant_attributes=(symbolic sudo deferred test)
   save_options "${relevant_attributes[@]}"
 
   local excluded_files="! -name .gitkeep ! -name .gitattributes"
@@ -238,6 +238,17 @@ function command_chattr()
   exit
 }
 
+function is_deferred_set_for()
+{
+  local path=$1
+
+  if [[ -d "$path" ]]; then
+    path=$path/.chez_test_gitattributes
+  fi
+
+  [[ "$(git check-attr deferred -- "$path")" == *": deferred: set" ]]
+}
+
 function prompt_user_whether_to_overwrite()
 {
   [[ "$connected_to_terminal" == "no" ]] && return 1
@@ -271,6 +282,11 @@ function is_overwrite_allowed()
 function apply_single_file()
 {
   local destination=$(repository_to_system "$1")
+
+  if [[ ! -z "$defer_mechanism_activated" && "$option_deferred" == "yes" ]]; then
+    # skipping this file: deferred
+    return 0
+  fi
 
   if [[ -e "$destination" ]]; then
     if ! is_overwrite_allowed "$1" "$destination"; then
@@ -323,6 +339,9 @@ function apply_single_path()
       return 1
     fi
   else
+    if [[ "$option_all" != "yes" ]] && ! is_deferred_set_for "$expanded_path"; then
+      local defer_mechanism_activated="yes"
+    fi
     for_each_found_file_with_options_slurped_do apply_single_file "$expanded_path" -type f
   fi
 
@@ -335,6 +354,7 @@ function command_apply()
   local option_overwrite=""
   local option_sudo=""
   local option_force=""
+  local option_all=""
   local success_cnt=0 failure_cnt=0
 
   shift
@@ -343,6 +363,8 @@ function command_apply()
       option_symbolic="yes"
     elif [[ "$1" == "-c" || "$1" == "--copy" ]]; then
       option_symbolic="no"
+    elif [[ "$1" == "-a" || "$1" == "--all" ]]; then
+      option_all="yes"
     elif [[ "$1" == "-f" || "$1" == "--force" ]]; then
       option_force="yes"
     elif [[ "$1" == "-o" || "$1" == "--overwrite" ]]; then
@@ -386,6 +408,7 @@ function command_apply_check_options()
     case "$1" in
       -s) ;&
       -c) ;&
+      -a|--all) ;&
       -o|--overwrite) ;&
       --overwrite=always) ;&
       --overwrite=never)  ;&
@@ -475,7 +498,7 @@ function add_file_to_repository()
 function record_attributes_if_necessary()
 {
   local attribute
-  local relevant_attributes=(symbolic sudo test)
+  local relevant_attributes=(symbolic sudo deferred test)
   local path="${REPOSITORY_DIR}/Files$(system_to_repository "$1")"
 
   if [[ -d "$path" ]]; then
@@ -541,6 +564,7 @@ function command_add()
 {
   local option_symbolic=""
   local option_sudo=""
+  local option_deferred=""
   local group=""
   local success_cnt=0 failure_cnt=0
 
@@ -561,6 +585,8 @@ function command_add()
       option_verbose="yes"
     elif [[ "$1" == "-n" || "$1" == "--dry-run" ]]; then
       option_dry_run="yes"
+    elif [[ "$1" == "--defer" ]]; then
+      option_deferred="yes"
     elif [[ "$1" == "-g" || "$1" == "--group" ]]; then
       shift
       if [[ -z "$1" || "$1" == -* ]]; then
@@ -602,6 +628,7 @@ function command_add_check_options()
       -n|--dry-run) ;&
       --sudo)   ;&
       --nosudo) ;&
+      --defer)  ;&
       -L|--follow-link) : ;;
       *)
         if [[ "$1" == -* ]]; then
