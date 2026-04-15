@@ -483,6 +483,7 @@ function add_file_to_repository()
     fi
   elif [[ -d "$1" ]]; then
     for_each_found_file_do add_file_to_repository "$1" -type f
+    for_each_found_file_do add_file_to_repository "$1" -type f ! -path '*/.git/*'
   else
     echo "Skipping $1: special file."
     return 1
