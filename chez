@@ -452,6 +452,158 @@ function perror_file_points_to_repository()
   # link target does not correspond to source file.
 }
 
+function find_group_basedir_for_file()
+{
+  local file_directory=${1%/*}
+
+  if [[ ! -e "${REPOSITORY_DIR}/Groups/$group" ]]; then
+    _group_basedir_path=${REPOSITORY_DIR}/Groups/$group
+    _group_basedir_base=$file_directory
+    return 0
+  fi
+
+  if [[ -e "${REPOSITORY_DIR}/Groups/$group" &&
+      ! -d "${REPOSITORY_DIR}/Groups/$group" ]]; then
+    perror "Groups/$group is not a directory" non-fatal
+    return 1
+  fi
+
+  local basedir_file base
+  local match_location=""
+  local group_path=${REPOSITORY_DIR}/Groups/${group}
+  while IFS= read -r -d '' basedir_file; do
+    read base < "$basedir_file"
+    if [[ "$file_directory/" == "$base"/* ]]; then
+      if [[ -z "$match_location" ]] ||
+	 [[ "${#base}" -gt "${#match_base}" ]]; then
+        match_location="${basedir_file%/*}"
+	match_base="$base"
+      fi
+    fi
+  done < <(find "$group_path" -name .chezgroupbasedir -print0)
+
+  if [[ -z "$match_location" ]]; then
+    _group_basedir_path=$group_path
+    _group_basedir_base=$file_directory
+  else
+    _group_basedir_path=$match_location
+    _group_basedir_base=$match_base
+  fi
+}
+
+function link_file_into_the_group()
+{
+  if [[ ! -z "$group_basedir_path" ]]; then
+    local link_name=${group_basedir_path}${1#"$group_basedir_base"}
+    verbose_message "Linking $link_name to $1"
+    is_this_a_dry_run ||
+    {
+      mkdir -p "${link_name%/*}" &&
+      ln -sfn "${REPOSITORY_DIR}/Files$1" "$link_name"
+    }
+  else
+    find_group_basedir_for_file "$1" || return 1
+    local link_name=${_group_basedir_path}${1#"$_group_basedir_base"}
+    verbose_message "Linking $link_name to $1"
+    is_this_a_dry_run ||
+    {
+      mkdir -p "${link_name%/*}"
+      ln -sfn "${REPOSITORY_DIR}/Files$1" "$link_name"
+    }
+  fi
+}
+
+function find_group_basedir()
+{
+  # Ensure $group is not already linked somewhere
+  local path=/$group
+  local path=${path%/*}
+  while [[ ! -z "$path" ]]; do
+    if [[ -e "${REPOSITORY_DIR}/Groups${path}/.chezgroupbasedir" ]]; then
+      perror "${path#/} is already linked to $(cat ${REPOSITORY_DIR}/Groups${path}/.chezgroupbasedir)" non-fatal
+      return 1
+    fi
+    path=${path%/*}
+  done
+
+  if [[ ! -e "${REPOSITORY_DIR}/Groups/$group" ]]; then
+    is_this_a_dry_run ||
+    { verbose_message "Creating group $group"
+      mkdir -p "${REPOSITORY_DIR}/Groups/$group" ||
+      {
+	perror "Couldn't create group '$group'" non-fatal
+	return 1
+      }
+    echo "$1" > "${REPOSITORY_DIR}/Groups/$group/.chezgroupbasedir"; }
+    _group_basedir_path=${REPOSITORY_DIR}/Groups/$group
+    _group_basedir_base=$1
+    return 0
+  fi
+
+  if [[ -e "${REPOSITORY_DIR}/Groups/$group" &&
+      ! -d "${REPOSITORY_DIR}/Groups/$group" ]]; then
+    perror "Groups/$group is not a directory" non-fatal
+    return 1
+  fi
+
+  if [[ -z "$(ls -A "${REPOSITORY_DIR}/Groups/$group")" ]]; then
+    is_this_a_dry_run ||
+    echo "$1" > "${REPOSITORY_DIR}/Groups/$group/.chezgroupbasedir"
+    _group_basedir_path=${REPOSITORY_DIR}/Groups/$group
+    _group_basedir_base=$1
+    return 0
+  fi
+
+  if [[ -e "${REPOSITORY_DIR}/Groups/$group/.chezgroupbasedir" ]]; then
+   local basedir
+   read basedir < "${REPOSITORY_DIR}/Groups/$group/.chezgroupbasedir"
+   if [[ "$1/" != "$basedir"/* ]]; then
+     # For now just report error, later automatically move the content
+     # of Groups/$group one level deeper into new subdirectory freeing
+     # the space for another sibling subdirectory for this new content.
+     perror "'$group' is already linked to $basedir"
+     return 1
+   fi
+  fi
+
+  local file base number_of_matches=0
+  local merge_location=""
+  local match_location=""
+  local group_path=${REPOSITORY_DIR}/Groups/${group}
+  while IFS= read -r -d '' file; do
+    read base < "$file"
+    if [[ "$1/" == "$base"/* ]]; then
+      if [[ -z "$match_location" ]] ||
+	 [[ "${#base}" -gt "${#match_base}" ]]; then
+        match_location="${file%/*}"
+	match_base="$base"
+      fi
+      (( ++number_of_matches ))
+    elif [[ "$base/" == "$1"/* ]]; then
+      merge_location="${file%/*}"
+      merge_base="$base"
+      (( ++number_of_matches ))
+    fi
+  done < <(find "$group_path" -name .chezgroupbasedir -print0)
+
+  if [[ -z "$match_location" ]]; then
+    is_this_a_dry_run ||
+    { mkdir "$group_path/${1##*/}" ||
+      {
+	perror "Couldnt create '$group_path/${1##*/}'" non-fatal
+	return 1
+      }
+      echo "$1" > "$group_path/${1##*/}/.chezgroupbasedir"
+    }
+    _group_basedir_path=$group_path/${1##*/}
+    _group_basedir_base=$1
+  else
+    _group_basedir_path=$match_location
+    _group_basedir_base=$match_base
+  fi
+  return 0
+}
+
 function is_sudo_necessary_for()
 {
   if [[ "$option_symbolic" == "yes" ]]; then
@@ -481,8 +633,14 @@ function add_file_to_repository()
         ln -s "${REPOSITORY_DIR}/Files${destination_filename}" "$1"; }
       verbose_message "Replacing $1 with symbolic link to repository"
     fi
+    [[ -z "$group" ]] ||
+      link_file_into_the_group "$destination_filename"
   elif [[ -d "$1" ]]; then
-    for_each_found_file_do add_file_to_repository "$1" -type f
+    if [[ ! -z "$group" ]]; then
+      find_group_basedir "$(system_to_repository "$1")" || return 1
+      local group_basedir_path=$_group_basedir_path
+      local group_basedir_base=$_group_basedir_base
+    fi
     for_each_found_file_do add_file_to_repository "$1" -type f ! -path '*/.git/*'
   else
     echo "Skipping $1: special file."
@@ -593,7 +751,7 @@ function command_add()
       if [[ -z "$1" || "$1" == -* ]]; then
         perror "option -g is missing required argument"
       else
-        group=$1
+        group=${1%/}
       fi
     elif [[ "$1" != -* ]]; then
       add_single_path "$1" && (( ++success_cnt )) || (( ++failure_cnt ))
