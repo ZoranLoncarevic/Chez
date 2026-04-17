@@ -694,7 +694,7 @@ function record_attributes_if_necessary()
     if [[ "$value" == " set" && "${!option_value}" != "yes" ]] ||
        [[ "$value" != " set" && "${!option_value}" == "yes" ]]; then
       [[ "$value" == " set" ]] && sign_prefix="-" || sign_prefix=""
-      verbose_message "Recording attribute $sign_prefix${attribute# } for $path"
+      verbose_message "Recording attribute $sign_prefix${attribute# } for ${path%.chez_test_gitattributes}"
       if [[ "$option_dry_run" != "yes" ]]; then
         if [[ -d "$1" ]]; then
           echo "* $sign_prefix${attribute# }" >> "${path%/*}/.gitattributes"
