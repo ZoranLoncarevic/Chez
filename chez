@@ -74,6 +74,19 @@ function repository_to_system()
   echo $system
 }
 
+function remove_element_from_array()
+{
+  local -n _array=$1
+  local new_array=()
+
+  for item in "${_array[@]}"; do
+    if [[ "$item" != "$2" ]]; then
+      new_array+=("$item")
+    fi
+  done
+  _array=("${new_array[@]}")
+}
+
 function for_each_found_file_do()
 {
   local callback=$1
@@ -647,8 +660,12 @@ function add_file_to_repository()
     return 1
   fi
 
-  if is_sudo_necessary_for "$1"; then
+  if [[ -f "$1" ]] &&
+     [[ -z "$option_sudo" ]] &&
+     is_sudo_necessary_for "$1"; then
     option_sudo="yes"
+    record_attributes_if_necessary "$1" "sudo"
+    option_sudo=""
   fi
 
   return 0
@@ -659,6 +676,12 @@ function record_attributes_if_necessary()
   local attribute
   local relevant_attributes=(symbolic sudo deferred test)
   local path="${REPOSITORY_DIR}/Files$(system_to_repository "$1")"
+
+  [[ -z "$option_sudo" ]] &&
+  remove_element_from_array relevant_attributes "sudo"
+
+  [[ -z "$2" ]] ||
+  local relevant_attributes=($2)
 
   if [[ -d "$path" ]]; then
     path=$path/.chez_test_gitattributes
