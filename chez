@@ -148,6 +148,60 @@ function command_git()
   exit 0
 }
 
+function expand_group_path()
+{
+  local path=${1/#:/$REPOSITORY_DIR/Groups/}
+  path=$(realpath -s -- "$path")
+
+  if [[ "$path" != "$REPOSITORY_DIR/Groups/"* ]]; then
+    perror "$path is not a Groups directory"
+  fi
+  
+  echo "$path"
+}
+
+function mv_group()
+{
+  echo "Moving '$1' to '$2'"
+  return 0
+}
+
+function command_mv()
+{
+  local src dest exit_code=0
+
+  shift
+  if [[ $# -lt 2 ]]; then
+    perror "$0 mv: missing source or destination"
+  fi
+
+  if [[ $# -eq 2 ]]; then
+    src=$(expand_group_path "$1")
+    dest=$(expand_group_path "$2")
+    mv_group "$src" "$dest"
+    exit
+  fi
+
+  dest=$(expand_group_path "${!#}")
+  if [[ ! -e "$dest" ]]; then
+    mkdir -p "$dest" ||
+      perror "Couldn't create ${!#}"
+  fi
+  if [[ ! -d "$dest" ]]; then
+    perror "${!#} is not a directory"
+  fi
+
+  set -- "${@:1:$#-1}"
+  while [[ $# -gt 0 ]]; do
+    src=$(expand_group_path "$1")
+    mv_group "$src" "$dest" ||
+      exit_code=1
+    shift
+  done
+
+  exit $exit_code
+}
+
 function command_chattr()
 {
   local failure_cnt=0
@@ -878,6 +932,8 @@ while [[ $# -gt 0 ]]; do
       command_git "$@"    ;;
     chattr)
       command_chattr "$@" ;;
+    mv)
+      command_mv "$@"     ;;
     *) perror_unknown_option_or_command "$1" ;;
   esac
   shift
