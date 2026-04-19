@@ -160,10 +160,36 @@ function expand_group_path()
   echo "$path"
 }
 
+function update_source_link_for_mv()
+{
+  ln -sfn "$(readlink -f "$1")" "$1"
+}
+
+function update_dest_link_for_mv()
+{
+  ln -sfnr "$(readlink -f "$1")" "$1"
+}
+
 function mv_group()
 {
-  echo "Moving '$1' to '$2'"
-  return 0
+  verbose_message "Moving ${1/#$REPOSITORY_DIR\/Groups\//:} to" \
+                         "${2/#$REPOSITORY_DIR\/Groups\//:}"
+  if is_this_a_dry_run; then
+    return 0
+  fi
+
+  if [[ ! -e "$1" ]]; then
+    perror "$1: does not exist" non-fatal
+    return 1
+  fi
+
+  for_each_found_file_do update_source_link_for_mv "$1" -type l
+  mv "$1" "$2" ||
+  {
+    for_each_found_file_do update_dest_link_for_mv "$1" -type l
+    return 1
+  }
+  for_each_found_file_do update_dest_link_for_mv "$2" -type l
 }
 
 function command_mv()
