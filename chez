@@ -566,7 +566,7 @@ function link_file_into_the_group()
     is_this_a_dry_run ||
     {
       mkdir -p "${link_name%/*}" &&
-      ln -sfn "${REPOSITORY_DIR}/Files$1" "$link_name"
+      ln -srfn "${REPOSITORY_DIR}/Files$1" "$link_name"
     }
   else
     find_group_basedir_for_file "$1" || return 1
@@ -575,7 +575,7 @@ function link_file_into_the_group()
     is_this_a_dry_run ||
     {
       mkdir -p "${link_name%/*}"
-      ln -sfn "${REPOSITORY_DIR}/Files$1" "$link_name"
+      ln -srfn "${REPOSITORY_DIR}/Files$1" "$link_name"
     }
   fi
 }
