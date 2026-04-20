@@ -107,7 +107,7 @@ function for_each_found_file_with_options_slurped_do()
   local callback=$1
   shift
 
-  local relevant_attributes=(symbolic sudo deferred permission overwrite test)
+  local relevant_attributes=(symbolic sudo deferred permission owner overwrite test)
   save_options "${relevant_attributes[@]}"
 
   local excluded_files="! -name .gitkeep ! -name .gitattributes"
@@ -423,6 +423,12 @@ function apply_single_file()
     is_this_a_dry_run ||
     $sudo_prefix chmod "$option_permission" "$destination"
   fi
+
+  if [[ ! -z "$option_owner" ]]; then
+    verbose_message "Changing owner of file to ${option_owner//+/:}"
+    is_this_a_dry_run ||
+    $sudo_prefix chown "${option_owner//+/:}" "$destination"
+  fi
 }
 
 function apply_single_path()
@@ -469,6 +475,7 @@ function command_apply()
   local option_force=""
   local option_all=""
   local option_permission=""
+  local option_owner=""
   local success_cnt=0 failure_cnt=0
 
   shift
