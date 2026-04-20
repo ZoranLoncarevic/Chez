@@ -269,6 +269,15 @@ function command_chattr()
       path=${REPOSITORY_DIR}/Files$(system_to_repository "$path")
     fi
 
+    if [[ "$path" == "$REPOSITORY_DIR/Groups/"* ]]; then
+      if [[ -h "$path" ]]; then
+	path="$(realpath -- $path)"
+      else
+	perror "${path/#$REPOSITORY_DIR\/Groups\//:}: can't set attribute"
+	return 1
+      fi
+    fi
+
     if [[ ! -e "$path" ]]; then
       perror "${files[i]} does not exist in repository" non-fatal
       unset 'files[i]'
