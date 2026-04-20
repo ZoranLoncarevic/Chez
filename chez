@@ -606,6 +606,28 @@ function link_file_into_the_group()
   fi
 }
 
+function make_space_for_another_group()
+{
+  local group_path="$REPOSITORY_DIR/Groups/$group"
+  local counter=0
+  local subdir_name=${basedir##*/}
+  while [[ -e "$group_path/$subdir_name" ]]; do
+    (( ++counter ))
+    subdir_name="${basedir##*/}($counter)"
+    if [[ $counter -gt 128 ]]; then
+      return 1
+    fi
+  done
+
+  local exit_code=0
+  mkdir "$group_path/$subdir_name" || return 1
+  for_each_found_file_do update_source_link_for_mv "$group_path" -type l
+  find "$group_path" -maxdepth 1 -mindepth 1 ! -name "$subdir_name" \
+       -exec mv -t "$group_path/$subdir_name" {} + || exit_code=1
+  for_each_found_file_do update_dest_link_for_mv "$group_path" -type l
+  return $exit_code
+}
+
 function find_group_basedir()
 {
   # Ensure $group is not already linked somewhere
@@ -651,11 +673,12 @@ function find_group_basedir()
    local basedir
    read basedir < "${REPOSITORY_DIR}/Groups/$group/.chezgroupbasedir"
    if [[ "$1/" != "$basedir"/* ]]; then
-     # For now just report error, later automatically move the content
-     # of Groups/$group one level deeper into new subdirectory freeing
-     # the space for another sibling subdirectory for this new content.
-     perror "'$group' is already linked to $basedir"
-     return 1
+     verbose_message "Moving $1 into subdirectory"
+     make_space_for_another_group "$1" ||
+       {
+	 perror "Failed to move content of '$group'"
+	 return 1
+       }
    fi
   fi
 
