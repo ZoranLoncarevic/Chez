@@ -107,7 +107,7 @@ function for_each_found_file_with_options_slurped_do()
   local callback=$1
   shift
 
-  local relevant_attributes=(symbolic sudo deferred permission test)
+  local relevant_attributes=(symbolic sudo deferred permission overwrite test)
   save_options "${relevant_attributes[@]}"
 
   local excluded_files="! -name .gitkeep ! -name .gitattributes"
