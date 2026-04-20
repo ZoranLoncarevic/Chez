@@ -3,6 +3,7 @@
 
 arg0=${0##*/}
 : "${REPOSITORY_DIR:=$HOME/Projects/Chez/Repository}"
+excluded_files=( "!" "-path" "*/.git/*")
 connected_to_terminal=$([[ -t 0 ]] && echo yes || echo no)
 
 function usage() {
@@ -720,6 +721,21 @@ function find_group_basedir()
   return 0
 }
 
+function read_exclude_file()
+{
+  local file
+  if [[ -f "$REPOSITORY_DIR/.chezignore" ]]; then
+    excluded_files=()
+    while IFS= read -r file; do
+      if [[ "$file" == */* ]]; then
+        excluded_files+=("!" "-path" "$file")
+      else
+	excluded_files+=("!" "-path" '*/$file')
+      fi
+    done
+  fi
+}
+
 function is_sudo_necessary_for()
 {
   if [[ "$option_symbolic" == "yes" ]]; then
@@ -757,7 +773,8 @@ function add_file_to_repository()
       local group_basedir_path=$_group_basedir_path
       local group_basedir_base=$_group_basedir_base
     fi
-    for_each_found_file_do add_file_to_repository "$1" -type f ! -path '*/.git/*'
+    read_exclude_file
+    for_each_found_file_do add_file_to_repository "$1" -type f "${excluded_files[@]}"
   else
     echo "Skipping $1: special file."
     return 1
