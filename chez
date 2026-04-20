@@ -127,8 +127,12 @@ function for_each_found_file_with_options_slurped_do()
 
       prev_file=$file
       option_variable=option_$attribute
-      if [[ -z "${!option_variable}" && "$value" == "set" ]]; then
-        printf -v "$option_variable" "yes"
+      if [[ -z "${!option_variable}" ]]; then
+	if [[ "$value" == "set" ]]; then
+	  printf -v "$option_variable" "yes"
+	elif [[ "$value" != "unset" && "$value" != "unspecified" ]]; then
+	  printf -v "$option_variable" "$value"
+	fi
       fi
     done
     "$callback" "$prev_file" || (( ++failure_cnt ))
