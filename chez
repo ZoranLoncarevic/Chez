@@ -148,6 +148,7 @@ function for_each_found_file_with_options_slurped_do()
 
       if [[ "$file" != "$prev_file" && ! -z "$prev_file" ]]; then
 	option_exec=$(slurp_option_exec_from_filename "$prev_file" "$option_exec")
+	[[ "$option_exec" == "modify" ]] && option_overwrite="yes"
         "$callback" "$prev_file" || (( ++failure_cnt ))
         restore_options "${relevant_attributes[@]}"
       fi
@@ -163,6 +164,7 @@ function for_each_found_file_with_options_slurped_do()
       fi
     done
     option_exec=$(slurp_option_exec_from_filename "$prev_file" "$option_exec")
+    [[ "$option_exec" == "modify" ]] && option_overwrite="yes"
     "$callback" "$prev_file" || (( ++failure_cnt ))
     (( failure_cnt == 0 ))
     exit $? )
