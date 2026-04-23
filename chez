@@ -119,9 +119,12 @@ function for_each_found_file_do()
   local callback=$1
   shift
 
+  local print0="-print0"
+  [[ "${!#}" == "+" ]] && print0=""
+
   while IFS= read -r -d '' file; do
     "$callback" "$file"
-  done < <(find "$@" -print0)
+  done < <(find "$@" $print0)
 }
 
 function for_each_found_file_with_options_slurped_do()
