@@ -2,9 +2,12 @@
 # Copyright (C) 2026 Zoran Loncarevic
 
 arg0=${0##*/}
+: "${CHEZPAGER:=less -FR}"
 : "${REPOSITORY_DIR:=$HOME/Projects/Chez/Repository}"
 excluded_files=( "!" "-path" "*/.git/*")
-connected_to_terminal=$([[ -t 0 ]] && echo yes || echo no)
+[[ -t 0 && -t 1 ]] &&
+  connected_to_terminal="yes" ||
+  connected_to_terminal="no"
 
 function usage() {
   echo "Usage: $arg0 [options] command ..."
@@ -27,6 +30,15 @@ function verbose_message()
 {
   if [[ "$option_verbose" == "yes" ]]; then
     echo "+$1"
+  fi
+}
+
+function invoke_pager_if_on_terminal()
+{
+  if [[ "$connected_to_terminal" == yes ]]; then
+    $CHEZPAGER
+  else
+    cat
   fi
 }
 
@@ -187,10 +199,62 @@ function get_cli_arg_as_repository_path()
   [[ -e "$expanded_path" ]]
 }
 
+function diff_single_pair()
+{
+  local system=$(repository_to_system "$1")
+  if [[ ! -e "$system" ]]; then
+    echo "$system does not exists"
+  else
+    local rep_regex=${REPOSITORY_DIR#/}
+    rep_regex=${rep_regex//\//\\\/}
+    git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$1" |
+    sed '/^\(\o033\[1m\)\?diff --git/s| '"$rep_regex"'\/Files\/[^\o033]*||
+         /^\(\o033\[1m\)\?+++ /s| [^\o033]*| Repository|' |
+    invoke_pager_if_on_terminal
+  fi
+}
+
 function command_diff()
 {
-  echo command_diff: done
-  exit 0
+  local paths=()
+  local diff_args=()
+
+  shift
+  while [[ $# -gt 0 && "$1" != "--" ]]; do
+    paths+=("$1")
+    shift
+  done
+  shift
+  local diff_options=("$@")
+
+  if (( ${#paths[@]} == 0 )); then
+    paths+=("${REPOSITORY_DIR}/Files")
+  fi
+
+  local color="auto"
+  [[ "$connected_to_terminal" == "yes" ]] && color="always"
+
+  local p
+  for p in "${paths[@]}"; do
+
+    local path=$(get_cli_arg_as_repository_path "$p")
+    if [[ ! -e "$path" ]]; then
+      perror "$p does not exist in repository"
+      continue
+    fi
+
+    if [[ "$path" == "$REPOSITORY_DIR/Groups/"* ]]; then
+      if [[ -d "$path" ]]; then
+	for_each_found_file_do diff_single_pair "$path" -type l -exec readlink -z -f {} +
+      elif [[ -h "$path" ]]; then
+	for_each_found_file_do diff_single_pair "$(realpath -- $path)"
+      fi
+    else
+      local excluded_files="! -name .gitkeep ! -name .gitattributes"
+      for_each_found_file_do diff_single_pair "$path" -type f $excluded_files
+    fi
+  done
+  exit
 }
 
 function command_git()
