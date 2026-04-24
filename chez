@@ -257,6 +257,49 @@ function command_diff()
   exit
 }
 
+function command_get_repository_path()
+{
+  shift
+  if [[ $# -eq 0 ]]; then
+    echo "$(get_cli_arg_as_repository_path /)"
+  else
+    while [[ $# -gt 0 ]]; do
+      echo "$(get_cli_arg_as_repository_path "$1")"
+      shift
+    done
+  fi
+  exit 0
+}
+
+function command_cd()
+{
+  shift
+  local directory=""
+  local cd_method="file"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -e) cd_method="exec" ;;
+       *) directory="$1"   ;;
+    esac
+    shift
+  done
+
+  [[ -z "$directory" ]] && directory=$HOME
+  local path=$(get_cli_arg_as_repository_path "$directory")
+  if [[ -f "$path" ]]; then
+    path=${path%/*}
+  fi
+
+  if [[ "$cd_method" == "file" ]]; then
+    : ${CDFILEPATH:=$HOME/.chezcdpath}
+    echo "cd $path" > "$CDFILEPATH"
+  else
+    ( cd "$path"
+      "$SHELL" )
+  fi
+  exit 0
+}
+
 function command_git()
 {
   echo command_git: done
@@ -1155,6 +1198,10 @@ while [[ $# -gt 0 ]]; do
       command_chattr "$@" ;;
     mv)
       command_mv "$@"     ;;
+    cd)
+      command_cd "$@"     ;;
+    get-repository-path)
+      command_get_repository_path "$@"       ;;
     *) perror_unknown_option_or_command "$1" ;;
   esac
   shift
