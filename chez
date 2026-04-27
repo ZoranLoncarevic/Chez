@@ -112,18 +112,19 @@ function remove_element_from_array()
   _array=("${new_array[@]}")
 }
 
-function slurp_option_exec_from_filename()
+function slurp_options_from_filename()
 {
   local basename=${1##*/}
-  if [[ "$basename" =~ ^exec_modify_ ]]; then
-    echo "modify"
-  elif [[ "$basename" =~ ^exec_no-output_ ]]; then
-    echo "no-output"
-  elif [[ "$basename" =~ ^exec_ ]]; then
-    echo "yes"
-  else
-    echo "$2"
-  fi
+  case "$basename" in
+    exec_modify_*)
+      option_exec="modify"    ;;
+    exec_no-output_*)
+      option_exec="no-output" ;;
+    exec_*)
+      option_exec="yes"       ;;
+  esac
+
+  [[ "$option_exec" == "modify" ]] && option_overwrite="yes"
 }
 
 function for_each_found_file_do()
@@ -162,8 +163,7 @@ function for_each_found_file_with_options_slurped_do()
       file="${line%:*}"
 
       if [[ "$file" != "$prev_file" && ! -z "$prev_file" ]]; then
-	option_exec=$(slurp_option_exec_from_filename "$prev_file" "$option_exec")
-	[[ "$option_exec" == "modify" ]] && option_overwrite="yes"
+	slurp_options_from_filename "$prev_file"
         "$callback" "$prev_file" || (( ++failure_cnt ))
         restore_options "${relevant_attributes[@]}"
       fi
@@ -178,8 +178,7 @@ function for_each_found_file_with_options_slurped_do()
 	fi
       fi
     done
-    option_exec=$(slurp_option_exec_from_filename "$prev_file" "$option_exec")
-    [[ "$option_exec" == "modify" ]] && option_overwrite="yes"
+    slurp_options_from_filename "$prev_file"
     "$callback" "$prev_file" || (( ++failure_cnt ))
     (( failure_cnt == 0 ))
     exit $? )
