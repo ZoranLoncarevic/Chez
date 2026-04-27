@@ -589,24 +589,24 @@ function apply_single_file()
     return
   elif [[ "$option_link" == "yes" ]]; then
     local link_target
-    IFS= read -r link_target < "$1"
+    IFS= read -r link_target < "$1" || return 1
     verbose_message "Linking $link_target to $destination $sudo_message"
     is_this_a_dry_run ||
-    $sudo_prefix ln -sfn "$link_target" "$destination"
+    $sudo_prefix ln -sfn "$link_target" "$destination" || return 1
   elif [[ "$option_symbolic" == "yes" ]]; then
     verbose_message "Linking $1 to $destination $sudo_message"
     is_this_a_dry_run ||
-    $sudo_prefix ln -sfn "$1" "$destination"
+    $sudo_prefix ln -sfn "$1" "$destination" || return 1
   else
     verbose_message "Copying $1 to $destination $sudo_message"
     is_this_a_dry_run ||
-    $sudo_prefix cp "$1" "$destination"
+    $sudo_prefix cp "$1" "$destination" || return 1
   fi
 
   if [[ ! -z "$option_permission" ]]; then
     verbose_message "Changing permission of file to $option_permission"
     is_this_a_dry_run ||
-    $sudo_prefix chmod "$option_permission" "$destination"
+    $sudo_prefix chmod "$option_permission" "$destination" || return 1
   fi
 
   if [[ ! -z "$option_owner" ]]; then
