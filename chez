@@ -705,6 +705,7 @@ function command_apply()
 
 function command_apply_check_options()
 {
+  expanded_arguments=("$1")
   shift
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -722,9 +723,17 @@ function command_apply_check_options()
       -f|--force) : ;;
       *)
         if [[ "$1" == -* ]]; then
-          perror "unknown option $1"
+	  if [[ "$1" == -[^-][^-]* ]]; then
+	    for (( i=1; i<${#1}; i++ )); do
+	      expanded_arguments+=("-${1:i:1}")
+	    done
+	    shift ; continue
+	  else
+	    perror "unknown option $1"
+	  fi
 	fi ;;
     esac
+    expanded_arguments+=("$1")
     shift
   done
 }
@@ -1136,10 +1145,12 @@ function command_add()
 
 function command_add_check_options()
 {
+  expanded_arguments=("$1")
   shift
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -g|--group)
+	expanded_arguments+=("$1")
         shift
 	if [[ -z "$1" || "$1" == -* ]]; then
           perror "option -g is missing required argument"
@@ -1155,9 +1166,17 @@ function command_add_check_options()
       -L|--follow-link) : ;;
       *)
         if [[ "$1" == -* ]]; then
-          perror "unknown option $1"
+	  if [[ "$1" == -[^-][^-]* ]]; then
+	    for (( i=1; i<${#1}; i++ )); do
+	      expanded_arguments+=("-${1:i:1}")
+	    done
+	    shift ; continue
+	  else
+	    perror "unknown option $1"
+	  fi
 	fi ;;
     esac
+    expanded_arguments+=("$1")
     shift
   done
 }
@@ -1176,21 +1195,6 @@ option_follow_link=""
 option_verbose=""
 option_dry_run=""
 
-# Expand short option groups
-cmd_line_args=()
-while [[ $# -gt 0 ]]; do
-  if [[ "$1" == -[^-][^-]* ]]; then
-    for (( i=1; i<${#1}; i++ )); do
-      cmd_line_args+=("-${1:i:1}")
-    done
-  else
-    cmd_line_args+=("$1")
-  fi
-  shift
-done
-
-set -- "${cmd_line_args[@]}"
-
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h|--help)
@@ -1207,9 +1211,11 @@ while [[ $# -gt 0 ]]; do
       option_follow_link="yes" ;;
     add)
       command_add_check_options "$@"
+      set -- "${expanded_arguments[@]}"
       command_add "$@"    ;;
     apply)
       command_apply_check_options "$@"
+      set -- "${expanded_arguments[@]}"
       command_apply "$@"  ;;
     diff)
       command_diff "$@"   ;;
