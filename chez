@@ -144,6 +144,42 @@ function for_each_found_file_do()
   done < <(find "$@" $print0)
 }
 
+function add_filter_attributes()
+{
+  if (( ${#filters[@]} > 0 )); then
+    declare -A union_map
+    for i in "${relevant_attributes[@]}" "${!filters[@]}"; do
+      union_map["$i"]=1
+    done
+    relevant_attributes=("${!union_map[@]}")
+  fi
+}
+
+function is_filtered()
+{
+  if (( ${#excludes[@]} > 0 )); then
+    local filter
+    for filter in "${excludes[@]}"; do
+      if [[ "$1" == $filter ]]; then
+	return 0
+      fi
+    done
+  fi
+
+  if (( ${#filters[@]} > 0 )); then
+    local attr
+    for attr in "${!filters[@]}"; do
+      local option_attr="option_$attr"
+      if [[ "${!option_attr}" != "${filters["$attr"]}" && -z "${negations["$attr"]}" ]] ||
+	 [[ "${!option_attr}" == "${filters["$attr"]}" && -n "${negations["$attr"]}" ]]; then
+	return 0
+      fi
+    done
+  fi
+
+  return 1
+}
+
 function for_each_found_file_with_options_slurped_do()
 {
   local file attribute value line
@@ -154,6 +190,7 @@ function for_each_found_file_with_options_slurped_do()
   shift
 
   local relevant_attributes=(symbolic sudo deferred permission owner link overwrite exec test)
+  add_filter_attributes
   save_options "${relevant_attributes[@]}"
 
   local excluded_files="! -name .gitkeep ! -name .gitattributes"
@@ -168,7 +205,9 @@ function for_each_found_file_with_options_slurped_do()
 
       if [[ "$file" != "$prev_file" && ! -z "$prev_file" ]]; then
 	slurp_options_from_filename "$prev_file"
-        "$callback" "$prev_file" || (( ++failure_cnt ))
+	if ! is_filtered "$prev_file"; then
+	  "$callback" "$prev_file" || (( ++failure_cnt ))
+	fi
         restore_options "${relevant_attributes[@]}"
       fi
 
@@ -183,7 +222,9 @@ function for_each_found_file_with_options_slurped_do()
       fi
     done
     slurp_options_from_filename "$prev_file"
-    "$callback" "$prev_file" || (( ++failure_cnt ))
+    if ! is_filtered "$prev_file"; then
+      "$callback" "$prev_file" || (( ++failure_cnt ))
+    fi
     (( failure_cnt == 0 ))
     exit $? )
   return $?
@@ -382,51 +423,51 @@ function list_repository_files()
   filter_list_of_files
 }
 
+function collect_exclude_options()
+{
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -e|--exclude)
+	shift
+	excludes+=("$1")
+    esac
+    shift
+  done
+}
+
+function add_filter()
+{
+  local attr value
+  local list_of_filters="$1,"
+  while [[ -n "$list_of_filters" ]]; do
+    local negation=""
+    local filter=${list_of_filters%%,*}
+    list_of_filters="${list_of_filters#*,}"
+    case "$filter" in
+      *!=*)
+	negation="yes"
+	attr="${filter%!=*}"
+	value="${filter#*!=}" ;;
+      *=*)
+	attr="${filter%=*}"
+	value="${filter#*=}" ;;
+      +*)
+	attr="${filter%+}"
+	value="set"          ;;
+      -*)
+	attr="${filter#-}"
+	value="unset"        ;;
+      *)
+	perror "invalid filter: $filter" non-fatal
+	return 1
+    esac
+    filters["$attr"]="$value"
+    [[ -n "$negation" ]] && negations["$attr"]="yes" || negations["$attr"]=""
+  done
+}
+
 function command_ls-files()
 {
-  function collect_some_of_the_options()
-  {
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-	-e|--exclude)
-	  shift
-	  excludes+=("$1")
-      esac
-      shift
-    done
-  }
-
-  function add_filter()
-  {
-    local attr value
-    local list_of_filters="$1,"
-    while [[ -n "$list_of_filters" ]]; do
-      local negation=""
-      local filter=${list_of_filters%%,*}
-      list_of_filters="${list_of_filters#*,}"
-      case "$filter" in
-	*!=*)
-	  negation="yes"
-	  attr="${filter%!=*}"
-	  value="${filter#*!=}" ;;
-	*=*)
-	  attr="${filter%=*}"
-	  value="${filter#*=}" ;;
-	+*)
-	  attr="${filter%+}"
-	  value="set"          ;;
-	-*)
-	  attr="${filter#-}"
-	  value="unset"        ;;
-	*)
-	  perror "invalid filter: $filter" non-fatal
-	  return 1
-      esac
-      filters["$attr"]="$value"
-      [[ -n "$negation" ]] && negations["$attr"]="yes" || negations["$attr"]=""
-    done
-  }
-
   declare -A filters negations
   local excludes=()
   local ls_files_options=()
@@ -437,7 +478,7 @@ function command_ls-files()
   set -- "${expanded_arguments[@]}"
 
   shift
-  collect_some_of_the_options "$@"
+  collect_exclude_options "$@"
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -c|--cached)   ;&
@@ -827,6 +868,7 @@ function apply_single_file()
 
 function apply_single_path()
 {
+  local exit_code
   local expanded_path
   if ! expanded_path="$(get_cli_arg_as_repository_path "$1")"; then
     perror "$1 does not exist in repository" non-fatal
@@ -852,7 +894,12 @@ function apply_single_path()
     for_each_found_file_with_options_slurped_do apply_single_file "$expanded_path" -type f
   fi
 
-  return $?
+  exit_code=$?
+  if [[ -z "$keep_the_same_filters" ]]; then
+    filters=()
+    negations=()
+  fi
+  return $exit_code
 }
 
 function command_apply()
@@ -867,6 +914,11 @@ function command_apply()
   local option_link=""
   local option_exec=""
   local success_cnt=0 failure_cnt=0
+
+  declare -A filters negations
+  local excludes=()
+  local keep_the_same_filters=""
+  collect_exclude_options "$@"
 
   shift
   while [[ $# -gt 0 ]]; do
@@ -894,6 +946,13 @@ function command_apply()
       option_verbose="yes"
     elif [[ "$1" == "-n" || "$1" == "--dry-run" ]]; then
       option_dry_run="yes"
+    elif [[ "$1" == "--filter" ]]; then
+      shift
+      add_filter "$1"
+    elif [[ "$1" == "--exclude" ]]; then
+      shift
+    elif [[ "$1" == "-g" || "$1" == "--global" ]]; then
+      keep_the_same_filters="yes"
     elif [[ "$1" != -* ]]; then
       apply_single_path "$1" && (( ++success_cnt )) || (( ++failure_cnt ))
     else
@@ -929,7 +988,14 @@ function command_apply_check_options()
       -n|--dry_run) ;&
       --sudo)   ;&
       --nosudo) ;&
+      -g|--global)  ;&
       -f|--force) : ;;
+      --filter)
+	expanded_arguments+=("$1")
+	shift ;;
+      --exclude)
+	expanded_arguments+=("$1")
+	shift ;;
       *)
         if [[ "$1" == -* ]]; then
 	  if [[ "$1" == -[^-][^-]* ]]; then
