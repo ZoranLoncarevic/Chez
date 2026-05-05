@@ -260,6 +260,215 @@ function command_diff()
   exit
 }
 
+function get_option_from_filename()
+{
+  local option_exec option_link "option_$1"
+  local option_var="option_$1"
+  printf -v "$option_var" ""
+  slurp_options_from_filename "$3"
+  local result=${!option_var}
+  [[ -n "$result" ]]           &&
+    echo "${result/yes/set}"   ||
+    echo "$2"
+}
+
+function filter_list_of_files()
+{
+  {
+    if (( ${#excludes[@]} == 0 )); then
+      sed "s|^|Files/|"
+    else
+      local file
+      while IFS= read -r file; do
+	local filter
+	for filter in "${excludes[@]}"; do
+	  if [[ "$file" == $filter ]]; then
+	    continue 2
+	  fi
+	done
+	echo "Files/$file"
+      done
+    fi
+  } |
+  {
+    if (( ${#filters[@]} == 0 )); then
+      cat
+    else
+      local prev_file="" reject=""
+      local value line attribute file
+      git -C "${REPOSITORY_DIR}" check-attr --stdin "${!filters[@]}" |
+      while IFS=: read -r line; do
+	# Split the line we read into fields using ':' as delimiter
+	value="${line##*: }"
+	line="${line%:*}"
+	attribute="${line##*: }"
+	file="${line%:*}"
+	value="$(get_option_from_filename "$attribute" "$value" "$file")"
+
+	if [[ "$file" != "$prev_file" && ! -z "$prev_file" ]]; then
+	  if [[ -z "$reject" ]]; then
+	    echo "$prev_file"
+	  else
+	    reject=""
+	  fi
+	fi
+
+	prev_file=$file
+	if [[ "$value" != "${filters["$attribute"]}" && -z "${negations["$attribute"]}" ]] ||
+	   [[ "$value" == "${filters["$attribute"]}" && -n "${negations["$attribute"]}" ]]; then
+	  reject="yes"
+	fi
+      done
+      [[ -z "$reject" ]] &&
+	echo "$prev_file"
+    fi
+  }
+}
+
+function command_ls-files_check_options()
+{
+  expanded_arguments=("$1")
+  shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -c|--cached)   ;&
+      -m|--modified) ;&
+      -o|--other)    ;&
+      -d|--deleted)  ;&
+      -g|--global) : ;;
+      -f|--filter)
+	expanded_arguments+=("$1")
+	shift        ;;
+      -e|--exclude)
+	expanded_arguments+=("$1")
+	shift        ;;
+      -*)
+	if [[ "$1" == -[^-][^-]* ]]; then
+	  for (( i=1; i<${#1}; i++ )); do
+	    expanded_arguments+=("-${1:i:1}")
+	  done
+	  shift ; continue
+	else
+	  perror "unknown option $1"
+	fi ;;
+    esac
+    expanded_arguments+=("$1")
+    shift
+  done
+}
+
+function list_repository_files()
+{
+  local path=$1
+  if [[ -n "$path" ]]; then
+    path="$(get_cli_arg_as_repository_path "$path")"
+    path="${path#$REPOSITORY_DIR/Files/}"
+  fi
+
+  {
+    if [[ "$path" == "$REPOSITORY_DIR/Groups/"* ]]; then
+      find "$path" -type l -exec readlink -f {} + |
+	sed "s|$REPOSITORY_DIR/Files/||"
+    elif [ ${#ls_files_options[@]} -eq 0 ]; then
+      find "$REPOSITORY_DIR/Files/$path" -type f ! -name .gitkeep ! -name .gitattributes |
+	sed "s|$REPOSITORY_DIR/Files/||"
+    else
+      git -C "$REPOSITORY_DIR" ls-files "${ls_files_options[@]}" "Files/$path" |
+	sed "/.gitkeep$/d
+	     /.gitattributes/d
+	     s|Files/||"
+    fi
+  } |
+  filter_list_of_files
+}
+
+function command_ls-files()
+{
+  function collect_some_of_the_options()
+  {
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+	-e|--exclude)
+	  shift
+	  excludes+=("$1")
+      esac
+      shift
+    done
+  }
+
+  function add_filter()
+  {
+    local attr value
+    local list_of_filters="$1,"
+    while [[ -n "$list_of_filters" ]]; do
+      local negation=""
+      local filter=${list_of_filters%%,*}
+      list_of_filters="${list_of_filters#*,}"
+      case "$filter" in
+	*!=*)
+	  negation="yes"
+	  attr="${filter%!=*}"
+	  value="${filter#*!=}" ;;
+	*=*)
+	  attr="${filter%=*}"
+	  value="${filter#*=}" ;;
+	+*)
+	  attr="${filter%+}"
+	  value="set"          ;;
+	-*)
+	  attr="${filter#-}"
+	  value="unset"        ;;
+	*)
+	  perror "invalid filter: $filter" non-fatal
+	  return 1
+      esac
+      filters["$attr"]="$value"
+      [[ -n "$negation" ]] && negations["$attr"]="yes" || negations["$attr"]=""
+    done
+  }
+
+  declare -A filters negations
+  local excludes=()
+  local ls_files_options=()
+  local keep_the_same_filters=""
+  local did_some_paths=""
+
+  command_ls-files_check_options "$@"
+  set -- "${expanded_arguments[@]}"
+
+  shift
+  collect_some_of_the_options "$@"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -c|--cached)   ;&
+      -m|--modified) ;&
+      -o|--other)    ;&
+      -d|--deleted)
+	ls_files_options+=("$1") ;;
+      -f|--filter)
+	shift
+	add_filter "$1" ;;
+      -e|--exclude)
+	shift           ;;
+      -g|--global)
+	keep_the_same_filters="yes" ;;
+      *)
+	did_some_paths="yes"
+	list_repository_files "$1"
+	if [[ -z "$keep_the_same_filters" ]]; then
+	  filters=()
+	  negations=()
+	fi ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$did_some_paths" ]]; then
+    list_repository_files
+  fi
+  exit
+}
+
 function command_get_repository_path()
 {
   shift
@@ -1233,6 +1442,8 @@ while [[ $# -gt 0 ]]; do
       command_cd "$@"     ;;
     get-repository-path)
       command_get_repository_path "$@"       ;;
+    ls-files)
+      command_ls-files "$@" ;;
     *) perror_unknown_option_or_command "$1" ;;
   esac
   shift
