@@ -284,6 +284,9 @@ function command_diff()
   local diff_args=()
   local did_some_paths=""
 
+  local filter_value_plus="yes"
+  local filter_value_minus=""
+
   shift
   while [[ $# -gt 0 && "$1" != "--" ]]; do
     our_args+=("$1")
@@ -494,10 +497,10 @@ function add_filter()
 	value="${filter#*=}" ;;
       +*)
 	attr="${filter#+}"
-	value="set"          ;;
+	value=$filter_value_plus  ;;
       -*)
 	attr="${filter#-}"
-	value="unset"        ;;
+	value=$filter_value_minus ;;
       *)
 	perror "invalid filter: $filter" non-fatal
 	return 1
@@ -514,6 +517,9 @@ function command_ls-files()
   local ls_files_options=()
   local keep_the_same_filters=""
   local did_some_paths=""
+
+  local filter_value_plus="set"
+  local filter_value_minus="unset"
 
   command_ls-files_check_options "$@"
   set -- "${expanded_arguments[@]}"
@@ -960,6 +966,9 @@ function command_apply()
   local excludes=()
   local keep_the_same_filters=""
   collect_exclude_options "$@"
+
+  local filter_value_plus="yes"
+  local filter_value_minus=""
 
   shift
   while [[ $# -gt 0 ]]; do
