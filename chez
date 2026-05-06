@@ -265,9 +265,16 @@ function diff_single_pair()
   else
     local rep_regex=${REPOSITORY_DIR#/}
     rep_regex=${rep_regex//\//\\\/}
-    git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$1" |
+    if [[ -z "$option_link" ]]; then
+      git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$1"
+    else
+      git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- - "$1" <<< \
+	       "$(readlink "$system" || echo '[Not a symbolic link]')"
+    fi |
     sed '/^\(\o033\[1m\)\?diff --git/s| '"$rep_regex"'\/Files\/[^\o033]*||
-         /^\(\o033\[1m\)\?+++ /s| [^\o033]*| Repository|'
+         /^\(\o033\[1m\)\?diff --git/s|diff --git -|diff --git '"$system [as symbolic link]"'|
+         /^\(\o033\[1m\)\?+++ /s| [^\o033]*| Repository|
+         /^\(\o033\[1m\)\?--- -/s|--- -|--- '"$system"'|'
   fi
 }
 
