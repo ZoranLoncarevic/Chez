@@ -275,6 +275,7 @@ function command_diff()
 {
   local our_args=()
   local diff_args=()
+  local did_some_paths=""
 
   shift
   while [[ $# -gt 0 && "$1" != "--" ]]; do
@@ -312,6 +313,7 @@ function command_diff()
 	  perror "$1 does not exist in repository"
 	fi
 
+	did_some_paths="yes"
 	if [[ "$path" == "$REPOSITORY_DIR/Groups/"* ]]; then
 	  if [[ -d "$path" ]]; then
 	    for_each_found_file_with_filtering_do diff_single_pair "$path" -type l -exec readlink -z -f {} +
@@ -325,6 +327,10 @@ function command_diff()
     esac
     shift
   done
+  if [[ -z "$did_some_paths" ]]; then
+    local excluded_files="! -name .gitkeep ! -name .gitattributes"
+    for_each_found_file_with_filtering_do diff_single_pair "$REPOSITORY_DIR/Files" -type f $excluded_files
+  fi
   exit
 }
 
