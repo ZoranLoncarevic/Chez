@@ -267,8 +267,7 @@ function diff_single_pair()
     rep_regex=${rep_regex//\//\\\/}
     git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$1" |
     sed '/^\(\o033\[1m\)\?diff --git/s| '"$rep_regex"'\/Files\/[^\o033]*||
-         /^\(\o033\[1m\)\?+++ /s| [^\o033]*| Repository|' |
-    invoke_pager_if_on_terminal
+         /^\(\o033\[1m\)\?+++ /s| [^\o033]*| Repository|'
   fi
 }
 
@@ -1528,7 +1527,9 @@ while [[ $# -gt 0 ]]; do
       set -- "${expanded_arguments[@]}"
       command_apply "$@"  ;;
     diff)
-      command_diff "$@"   ;;
+      command_diff "$@" |
+      invoke_pager_if_on_terminal
+      exit                ;;
     git)
       shift
       command_git "$@"    ;;
