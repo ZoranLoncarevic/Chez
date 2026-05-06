@@ -131,6 +131,16 @@ function slurp_options_from_filename()
   [[ "$option_exec" == "modify" ]] && option_overwrite="yes"
 }
 
+function for_each_found_file_with_filtering_do()
+{
+  local callback=$1
+  shift
+
+  while IFS= read -r file; do
+    "$callback" "$file"
+  done < <(find "$@" | filter_list_of_files)
+}
+
 function for_each_found_file_do()
 {
   local callback=$1
@@ -245,9 +255,12 @@ function get_cli_arg_as_repository_path()
 
 function diff_single_pair()
 {
+  [[ -z "$1" ]] && return
   local system=$(repository_to_system "$1")
   if [[ ! -e "$system" ]]; then
     echo "$system does not exists"
+  elif [[ -h "$system" && "$(realpath -- "$system")" == "$1" ]]; then
+    :
   else
     local rep_regex=${REPOSITORY_DIR#/}
     rep_regex=${rep_regex//\//\\\/}
@@ -260,43 +273,57 @@ function diff_single_pair()
 
 function command_diff()
 {
-  local paths=()
+  local our_args=()
   local diff_args=()
 
   shift
   while [[ $# -gt 0 && "$1" != "--" ]]; do
-    paths+=("$1")
+    our_args+=("$1")
     shift
   done
   shift
   local diff_options=("$@")
 
-  if (( ${#paths[@]} == 0 )); then
-    paths+=("${REPOSITORY_DIR}/Files")
-  fi
+  declare -A filters negations
+  local excludes=()
+  local keep_the_same_filters=""
+  collect_exclude_options "${our_args[@]}"
+
+  # if (( ${#paths[@]} == 0 )); then
+  #   paths+=("${REPOSITORY_DIR}/Files")
+  # fi
 
   local color="auto"
   [[ "$connected_to_terminal" == "yes" ]] && color="always"
 
-  local p
-  for p in "${paths[@]}"; do
+  set -- "${our_args[@]}"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --filter)
+	shift
+	add_filter "$1" ;;
+      --exclude)
+	shift             ;;
+      -g|--global)
+	keep_the_same_filters="yes" ;;
+      *)
+	local path=$(get_cli_arg_as_repository_path "$1")
+	if [[ ! -e "$path" ]]; then
+	  perror "$1 does not exist in repository"
+	fi
 
-    local path=$(get_cli_arg_as_repository_path "$p")
-    if [[ ! -e "$path" ]]; then
-      perror "$p does not exist in repository"
-      continue
-    fi
-
-    if [[ "$path" == "$REPOSITORY_DIR/Groups/"* ]]; then
-      if [[ -d "$path" ]]; then
-	for_each_found_file_do diff_single_pair "$path" -type l -exec readlink -z -f {} +
-      elif [[ -h "$path" ]]; then
-	for_each_found_file_do diff_single_pair "$(realpath -- $path)"
-      fi
-    else
-      local excluded_files="! -name .gitkeep ! -name .gitattributes"
-      for_each_found_file_do diff_single_pair "$path" -type f $excluded_files
-    fi
+	if [[ "$path" == "$REPOSITORY_DIR/Groups/"* ]]; then
+	  if [[ -d "$path" ]]; then
+	    for_each_found_file_with_filtering_do diff_single_pair "$path" -type l -exec readlink -z -f {} +
+	  elif [[ -h "$path" ]]; then
+	    for_each_found_file_with_filtering_do diff_single_pair "$(realpath -- $path)"
+	  fi
+	else
+	  local excluded_files="! -name .gitkeep ! -name .gitattributes"
+	  for_each_found_file_with_filtering_do diff_single_pair "$path" -type f $excluded_files
+	fi ;;
+    esac
+    shift
   done
   exit
 }
@@ -317,7 +344,7 @@ function filter_list_of_files()
 {
   {
     if (( ${#excludes[@]} == 0 )); then
-      sed "s|^|Files/|"
+      sed "\|${REPOSITORY_DIR}|! s|^|Files/|"
     else
       local file
       while IFS= read -r file; do
@@ -327,7 +354,11 @@ function filter_list_of_files()
 	    continue 2
 	  fi
 	done
-	echo "Files/$file"
+	if [[ "$file" == "${REPOSITORY_DIR}"* ]]; then
+	  echo "$file"
+	else
+	  echo "Files/$file"
+	fi
       done
     fi
   } |
@@ -452,7 +483,7 @@ function add_filter()
 	attr="${filter%=*}"
 	value="${filter#*=}" ;;
       +*)
-	attr="${filter%+}"
+	attr="${filter#+}"
 	value="set"          ;;
       -*)
 	attr="${filter#-}"
