@@ -843,6 +843,7 @@ function is_overwrite_allowed()
 function apply_single_file()
 {
   local destination=$(repository_to_system "$1")
+  local display_name=${1#$REPOSITORY_DIR/Files/}
 
   if [[ ! -z "$defer_mechanism_activated" && "$option_deferred" == "yes" ]]; then
     # skipping this file: deferred
@@ -851,7 +852,7 @@ function apply_single_file()
 
   if [[ -e "$destination" ]]; then
     if ! is_overwrite_allowed "$1" "$destination"; then
-      echo "Skipping $1: already exist"
+      echo "Skipping $display_name: already exist"
       return 0
     fi
   fi
@@ -863,11 +864,11 @@ function apply_single_file()
   fi
 
   if [[ ! -z "$option_exec" ]]; then
-    verbose_message "Executing $1 with $option_exec"
+    verbose_message "Executing $display_name with $option_exec"
     if [[ ! -x "$1" ]]; then
       chmod +x "$1" ||
       {
-	perror "$1: not executable" non-fatal
+	perror "$display_name: not executable" non-fatal
 	return 1
       }
     fi
@@ -891,11 +892,11 @@ function apply_single_file()
     is_this_a_dry_run ||
     $sudo_prefix ln -sfn "$link_target" "$destination" || return 1
   elif [[ "$option_symbolic" == "yes" ]]; then
-    verbose_message "Linking $1 to $destination $sudo_message"
+    verbose_message "Linking $display_name to $destination $sudo_message"
     is_this_a_dry_run ||
     $sudo_prefix ln -sfn "$1" "$destination" || return 1
   else
-    verbose_message "Copying $1 to $destination $sudo_message"
+    verbose_message "Copying $display_name to $destination $sudo_message"
     is_this_a_dry_run ||
     $sudo_prefix cp "$1" "$destination" || return 1
   fi
