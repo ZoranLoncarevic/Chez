@@ -199,6 +199,7 @@ function for_each_found_file_with_options_slurped_do()
   local callback=$1
   shift
 
+  [[ -z "$relevant_attributes" ]] &&
   local relevant_attributes=(symbolic sudo deferred permission owner link overwrite exec test)
   add_filter_attributes
   save_options "${relevant_attributes[@]}"
@@ -289,10 +290,7 @@ function command_diff()
   local excludes=()
   local keep_the_same_filters=""
   collect_exclude_options "${our_args[@]}"
-
-  # if (( ${#paths[@]} == 0 )); then
-  #   paths+=("${REPOSITORY_DIR}/Files")
-  # fi
+  local relevant_attributes=(link exec)
 
   local color="auto"
   [[ "$connected_to_terminal" == "yes" ]] && color="always"
@@ -316,20 +314,20 @@ function command_diff()
 	did_some_paths="yes"
 	if [[ "$path" == "$REPOSITORY_DIR/Groups/"* ]]; then
 	  if [[ -d "$path" ]]; then
-	    for_each_found_file_with_filtering_do diff_single_pair "$path" -type l -exec readlink -z -f {} +
+	    for_each_found_file_with_options_slurped_do diff_single_pair "$path" -type l -exec readlink -z -f {} +
 	  elif [[ -h "$path" ]]; then
-	    for_each_found_file_with_filtering_do diff_single_pair "$(realpath -- $path)"
+	    for_each_found_file_with_options_slurped_do diff_single_pair "$(realpath -- $path)"
 	  fi
 	else
 	  local excluded_files="! -name .gitkeep ! -name .gitattributes"
-	  for_each_found_file_with_filtering_do diff_single_pair "$path" -type f $excluded_files
+	  for_each_found_file_with_options_slurped_do diff_single_pair "$path" -type f $excluded_files
 	fi ;;
     esac
     shift
   done
   if [[ -z "$did_some_paths" ]]; then
     local excluded_files="! -name .gitkeep ! -name .gitattributes"
-    for_each_found_file_with_filtering_do diff_single_pair "$REPOSITORY_DIR/Files" -type f $excluded_files
+    for_each_found_file_with_options_slurped_do diff_single_pair "$REPOSITORY_DIR/Files" -type f $excluded_files
   fi
   exit
 }
