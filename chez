@@ -77,6 +77,7 @@ function system_to_repository()
   local part2=${repository##*/}
   part2=${part2/#exec_/literal_exec_}
   part2=${part2/#link_/literal_link_}
+  part2=${part2/#template_/literal_template_}
 
   echo "$part1/$part2"
 }
@@ -95,6 +96,7 @@ function repository_to_system()
   part2=${part2#exec_literal_}
   part2=${part2#exec_}
   part2=${part2#link_}
+  part2=${part2#template_}
   system="$part1/$part2"
 
   system=${system///literal_//}
@@ -124,6 +126,8 @@ function slurp_options_from_filename()
       option_exec="no-output" ;;
     exec_*)
       option_exec="yes"       ;;
+    template_*)
+      option_exec="template"  ;;
     link_*)
       option_link="yes"       ;;
   esac
@@ -874,6 +878,7 @@ function apply_single_file()
     fi
     is_this_a_dry_run ||
     case "$option_exec" in
+      template) ;&
       yes) $sudo_prefix "$1" > "$destination" ;;
       modify)
 	if [[ -f "$destination" ]]; then
