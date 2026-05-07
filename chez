@@ -872,6 +872,7 @@ function apply_single_file()
 	return 1
       }
     fi
+    is_this_a_dry_run ||
     case "$option_exec" in
       yes) $sudo_prefix "$1" > "$destination" ;;
       modify)
