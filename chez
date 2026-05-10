@@ -262,23 +262,56 @@ function diff_single_pair()
 {
   [[ -z "$1" ]] && return
   local system=$(repository_to_system "$1")
+  local repository=$1
+  local require_cleanup=""
   if [[ ! -e "$system" ]]; then
     echo "$system does not exists"
-  elif [[ -h "$system" && "$(realpath -- "$system")" == "$1" ]]; then
-    :
+    return 0
+  fi
+  if [[ -h "$system" && "$(realpath -- "$system")" == "$1" ]]; then
+    return 0
+  fi
+  if [[ -n "$option_exec" ]]; then
+    [[ "$option_exec" == "no-output" ]] && return 0
+    local mode=$script_mode
+    if [[ "$option_exec" == "template" && -n "$template_mode" ]]; then
+      mode=$template_mode
+    fi
+    case "$mode" in
+      none) return 0 ;;
+      source) :      ;;
+      output)
+	repository=$(mktemp) || return 0
+	require_cleanup="yes"
+	[[ -x "$1" ]] || chmod +x "$1" || return 0
+	case "$option_exec" in
+	  template) ;&
+	  yes) "$1" > "$repository" ;;
+	  modify)
+	    if [[ -f "$system" ]]; then
+	      "$1" < "$system" > "$repository"
+	    else
+	      "$1" < /dev/null > "$repository"
+	    fi ;;
+	esac
+    esac
+  fi
+  
+  local rep_regex=${REPOSITORY_DIR#/}
+  rep_regex=${rep_regex//\//\\\/}
+  if [[ -z "$option_link" ]]; then
+    git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$repository"
   else
-    local rep_regex=${REPOSITORY_DIR#/}
-    rep_regex=${rep_regex//\//\\\/}
-    if [[ -z "$option_link" ]]; then
-      git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$1"
-    else
-      git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- - "$1" <<< \
-	       "$(readlink "$system" || echo '[Not a symbolic link]')"
-    fi |
-    sed '/^\(\o033\[1m\)\?diff --git/s| '"$rep_regex"'\/Files\/[^\o033]*||
-         /^\(\o033\[1m\)\?diff --git/s|diff --git -|diff --git '"$system [as symbolic link]"'|
-         /^\(\o033\[1m\)\?+++ /s| [^\o033]*| Repository|
-         /^\(\o033\[1m\)\?--- -/s|--- -|--- '"$system"'|'
+    git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- - "$repository" <<< \
+	     "$(readlink "$system" || echo '[Not a symbolic link]')"
+  fi |
+  sed '/^\(\o033\[1m\)\?diff --git/s| '"$rep_regex"'\/Files\/[^\o033]*||
+       /^\(\o033\[1m\)\?diff --git/s|\(diff --git [^ ]*\) [^\o033]*|\1|
+       /^\(\o033\[1m\)\?diff --git/s|diff --git -|diff --git '"$system [as symbolic link]"'|
+       /^\(\o033\[1m\)\?+++ /s| [^\o033]*| Repository|
+       /^\(\o033\[1m\)\?--- -/s|--- -|--- '"$system"'|'
+  if [[ "$require_cleanup" == "yes" ]]; then
+    rm "$repository"
   fi
 }
 
@@ -305,6 +338,9 @@ function command_diff()
   collect_exclude_options "${our_args[@]}"
   local relevant_attributes=(link exec)
 
+  local template_mode=""
+  local script_mode="none"
+
   local color="auto"
   [[ "$connected_to_terminal" == "yes" ]] && color="always"
 
@@ -318,6 +354,18 @@ function command_diff()
 	shift             ;;
       -g|--global)
 	keep_the_same_filters="yes" ;;
+      --template=none)
+	template_mode="none"        ;;
+      --template=source)
+        template_mode="source"      ;;
+      --template=output)
+        template_mode="output"      ;;
+      --script=none)
+	script_mode="none"          ;;
+      --script=source)
+	script_mode="source"        ;;
+      --script=output)
+	script_mode="output"        ;;
       *)
 	local path=$(get_cli_arg_as_repository_path "$1")
 	if [[ ! -e "$path" ]]; then
