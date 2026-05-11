@@ -896,7 +896,7 @@ function is_deferred_set_for()
     path=$path/.chez_test_gitattributes
   fi
 
-  [[ "$(git check-attr deferred -- "$path")" == *": deferred: set" ]]
+  [[ "$(git -C "${REPOSITORY_DIR}" check-attr deferred -- "$path")" == *": deferred: set" ]]
 }
 
 function prompt_user_whether_to_overwrite()
