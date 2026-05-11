@@ -1395,6 +1395,12 @@ function add_file_to_repository()
     option_sudo=""
   fi
 
+  if [[ -f "$1" ]] &&
+     [[ "$automatic_permissions" == "yes" ]]; then
+    local path="${REPOSITORY_DIR}/Files$(system_to_repository "$1")"
+    echo "/${path##*/} permission=$(stat -c "%a" "$1")" >> "${path%/*}/.gitattributes"
+  fi
+
   return 0
 }
 
@@ -1474,6 +1480,7 @@ function command_add()
   local option_symbolic=""
   local option_sudo=""
   local option_deferred=""
+  local automatic_permissions=""
   local group=""
   local success_cnt=0 failure_cnt=0
 
@@ -1492,6 +1499,8 @@ function command_add()
       option_follow_link="store-link"
     elif [[ "$1" == "-L" || "$1" == "--follow-link" ]]; then
       option_follow_link="yes"
+    elif [[ "$1" == "--permission" ]]; then
+      automatic_permissions="yes"
     elif [[ "$1" == "-v" || "$1" == "--verbose" ]]; then
       option_verbose="yes"
     elif [[ "$1" == "-n" || "$1" == "--dry-run" ]]; then
@@ -1542,6 +1551,7 @@ function command_add_check_options()
       --sudo)   ;&
       --nosudo) ;&
       --defer)  ;&
+      --permission) ;&
       --store-link|--link) ;&
       -L|--follow-link) : ;;
       *)
