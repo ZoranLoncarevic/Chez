@@ -652,6 +652,30 @@ function command_cd()
   exit 0
 }
 
+function command_edit()
+{
+  shift
+  local paths=()
+  while [[ $# -gt 0 ]]; do
+    paths+=("$(get_cli_arg_as_repository_path "$1")")
+    shift
+  done
+
+  local SELECTED_EDITOR="${VISUAL:${EDITOR:-vi}}"
+  if ! command -v "$SELECTED_EDITOR" >/dev/null 2>&1; then
+    echo "Error: Configured editor '$SELECTED_EDITOR' not found."
+    SELECTED_EDITOR="vi"
+    echo "Falling back to: $SELECTED_EDITOR"
+  fi
+
+  if (( ${#paths[@]} == 0 )); then
+    "$SELECTED_EDITOR" "$(get_cli_arg_as_repository_path "/")"
+  else
+    "$SELECTED_EDITOR" "${paths[@]}"
+  fi
+  exit
+}
+
 function command_git()
 {
   echo command_git: done
@@ -1627,6 +1651,8 @@ while [[ $# -gt 0 ]]; do
       command_get_repository_path "$@"       ;;
     ls-files)
       command_ls-files "$@" ;;
+    edit)
+      command_edit "$@"     ;;
     *) perror_unknown_option_or_command "$1" ;;
   esac
   shift
