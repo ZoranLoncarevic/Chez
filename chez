@@ -265,7 +265,7 @@ function diff_single_pair()
   local repository=$1
   local require_cleanup=""
   if [[ ! -e "$system" ]]; then
-    echo "$system does not exists"
+    echo -e "\e[1mDoes not exist: $system\e[m"
     return 0
   fi
   if [[ -h "$system" && "$(realpath -- "$system")" == "$1" ]]; then
