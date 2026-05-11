@@ -459,6 +459,15 @@ function filter_list_of_files()
       [[ -z "$reject" && -n $prev_file ]] &&
 	echo "${prev_file#File/}"
     fi
+  } |
+  {
+    if [[ -z "$print_directories" ]]; then
+      cat
+    else
+      sed 's|\/[^\/]*$||' |
+      sort |
+      uniq
+    fi
   }
 }
 
@@ -472,6 +481,7 @@ function command_ls-files_check_options()
       -m|--modified) ;&
       -o|--other)    ;&
       -d|--deleted)  ;&
+      --directory)   ;&
       -g|--global) : ;;
       -f|--filter)
 	expanded_arguments+=("$1")
@@ -568,6 +578,7 @@ function command_ls-files()
   local excludes=()
   local ls_files_options=()
   local keep_the_same_filters=""
+  local print_directories=""
   local did_some_paths=""
 
   local filter_value_plus="set"
@@ -592,6 +603,8 @@ function command_ls-files()
 	shift           ;;
       -g|--global)
 	keep_the_same_filters="yes" ;;
+      --directory)
+	print_directories="yes"     ;;
       *)
 	did_some_paths="yes"
 	list_repository_files "$1"
