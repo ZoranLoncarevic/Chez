@@ -678,7 +678,7 @@ function command_edit()
 
 function command_git()
 {
-  echo command_git: done
+  git -C "${REPOSITORY_DIR}" "$@"
   exit 0
 }
 
