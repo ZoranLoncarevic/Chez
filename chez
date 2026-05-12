@@ -261,6 +261,7 @@ function get_cli_arg_as_repository_path()
 function diff_single_pair()
 {
   [[ -z "$1" ]] && return
+  [[ -n "$defer_mechanism_activated" && "$option_deferred" == "yes" ]] && return
   local system=$(repository_to_system "$1")
   local repository=$1
   local require_cleanup=""
@@ -336,10 +337,11 @@ function command_diff()
   local excludes=()
   local keep_the_same_filters=""
   collect_exclude_options "${our_args[@]}"
-  local relevant_attributes=(link exec)
+  local relevant_attributes=(link exec deferred)
 
   local template_mode=""
   local script_mode="none"
+  local option_all=""
 
   local color="auto"
   [[ "$connected_to_terminal" == "yes" ]] && color="always"
@@ -366,6 +368,8 @@ function command_diff()
 	script_mode="source"        ;;
       --script=output)
 	script_mode="output"        ;;
+      -a|--all)
+	option_all="yes"            ;;
       *)
 	local path=$(get_cli_arg_as_repository_path "$1")
 	if [[ ! -e "$path" ]]; then
@@ -380,6 +384,9 @@ function command_diff()
 	    for_each_found_file_with_options_slurped_do diff_single_pair "$(realpath -- $path)"
 	  fi
 	else
+	  if [[ "$option_all" != "yes" ]] && ! is_deferred_set_for "$path"; then
+	    local defer_mechanism_activated="yes"
+	  fi
 	  local excluded_files="! -name .gitkeep ! -name .gitattributes"
 	  for_each_found_file_with_options_slurped_do diff_single_pair "$path" -type f $excluded_files
 	fi ;;
@@ -387,6 +394,8 @@ function command_diff()
     shift
   done
   if [[ -z "$did_some_paths" ]]; then
+    [[ "$option_all" != "yes" ]] &&
+    local defer_mechanism_activated="yes"
     local excluded_files="! -name .gitkeep ! -name .gitattributes"
     for_each_found_file_with_options_slurped_do diff_single_pair "$REPOSITORY_DIR/Files" -type f $excluded_files
   fi
