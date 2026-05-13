@@ -266,7 +266,11 @@ function diff_single_pair()
   local repository=$1
   local require_cleanup=""
   if [[ ! -e "$system" ]]; then
-    echo -e "\e[1mDoes not exist: $system\e[m"
+    if [[ "$status_not_diff" == "yes" ]]; then
+      echo -e "\e[0;31mD\e[m $system"
+    else
+      echo -e "\e[1mDoes not exist: $system\e[m"
+    fi
     return 0
   fi
   if [[ -h "$system" && "$(realpath -- "$system")" == "$1" ]]; then
@@ -297,20 +301,37 @@ function diff_single_pair()
 	esac
     esac
   fi
-  
-  local rep_regex=${REPOSITORY_DIR#/}
-  rep_regex=${rep_regex//\//\\\/}
-  if [[ -z "$option_link" ]]; then
-    git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$repository"
+
+  if [[ "$status_not_diff" == "yes" ]]; then
+    if [[ -z "$option_link" ]]; then
+      git diff --quiet --no-index -- "$system" "$repository" ||
+        echo -e "\e[0;31mM\e[m $system"
+    else
+      if [[ -h "$system" ]]; then
+        local link_target
+        IFS= read -r link_target < "$repository"
+        [[ "$(readlink "$system")" != "$link_target" ]] &&
+	  echo -e "\e[0;31mM\e[m $system"
+      else
+	echo -e "\e[0;31mT\e[m $system"
+      fi
+    fi
   else
-    git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- - "$repository" <<< \
-	     "$(readlink "$system" || echo '[Not a symbolic link]')"
-  fi |
-  sed '/^\(\o033\[1m\)\?diff --git/s| '"$rep_regex"'\/Files\/[^\o033]*||
-       /^\(\o033\[1m\)\?diff --git/s|\(diff --git [^ ]*\) [^\o033]*|\1|
-       /^\(\o033\[1m\)\?diff --git/s|diff --git -|diff --git '"$system [as symbolic link]"'|
-       /^\(\o033\[1m\)\?+++ /s| [^\o033]*| Repository|
-       /^\(\o033\[1m\)\?--- -/s|--- -|--- '"$system"'|'
+    local rep_regex=${REPOSITORY_DIR#/}
+    rep_regex=${rep_regex//\//\\\/}
+    if [[ -z "$option_link" ]]; then
+      git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$repository"
+    else
+      git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- - "$repository" <<< \
+	       "$(readlink "$system" || echo '[Not a symbolic link]')"
+    fi |
+    sed '/^\(\o033\[1m\)\?diff --git/s| '"$rep_regex"'\/Files\/[^\o033]*||
+	 /^\(\o033\[1m\)\?diff --git/s|\(diff --git [^ ]*\) [^\o033]*|\1|
+	 /^\(\o033\[1m\)\?diff --git/s|diff --git -|diff --git '"$system [as symbolic link]"'|
+	 /^\(\o033\[1m\)\?+++ /s| [^\o033]*| Repository|
+	 /^\(\o033\[1m\)\?--- -/s|--- -|--- '"$system"'|'
+  fi
+
   if [[ "$require_cleanup" == "yes" ]]; then
     rm "$repository"
   fi
@@ -1660,7 +1681,10 @@ while [[ $# -gt 0 ]]; do
     git)
       shift
       command_git "$@"    ;;
-    status) ;&
+    status)
+      status_not_diff="yes"
+      command_diff "$@"
+      exit                ;;
     commit)
       command_git "$@"    ;;
     chattr)
