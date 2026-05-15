@@ -1004,9 +1004,11 @@ function apply_single_file()
 	local script=$(mktemp)
 	"$1" > "$script"
 	chmod +x "$script" || return 1
-	$sudo_prefix "$script" > "$destination" ;;
+	$sudo_prefix "$script" > "$destination"
+	[[ ! -s "$destination" ]] && rm -f "$destination" ;;
       template) ;&
-      yes) $sudo_prefix "$1" > "$destination" ;;
+      yes) $sudo_prefix "$1" > "$destination"
+	[[ ! -s "$destination" ]] && rm -f "$destination" ;;
       modify)
 	if [[ -f "$destination" ]]; then
 	  $sudo_prefix "$1" < "$destination" | sponge "$destination"
