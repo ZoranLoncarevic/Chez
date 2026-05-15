@@ -96,6 +96,7 @@ function repository_to_system()
   part2=${part2#exec_literal_}
   part2=${part2#exec_}
   part2=${part2#link_}
+  part2=${part2#template_run_}
   part2=${part2#template_}
   system="$part1/$part2"
 
@@ -126,6 +127,8 @@ function slurp_options_from_filename()
       option_exec="no-output" ;;
     exec_*)
       option_exec="yes"       ;;
+    template_run_*)
+      option_exec="template-run" ;;
     template_*)
       option_exec="template"  ;;
     link_*)
@@ -290,6 +293,10 @@ function diff_single_pair()
 	require_cleanup="yes"
 	[[ -x "$1" ]] || chmod +x "$1" || return 0
 	case "$option_exec" in
+	  template-run)
+	    "$1" > "$repository"
+	    chmod +x "$repository" || return 0
+	    "$repository" | sponge "$repository" ;;
 	  template) ;&
 	  yes) "$1" > "$repository" ;;
 	  modify)
@@ -993,6 +1000,11 @@ function apply_single_file()
     fi
     is_this_a_dry_run ||
     case "$option_exec" in
+      template-run)
+	local script=$(mktemp)
+	"$1" > "$script"
+	chmod +x "$script" || return 1
+	$sudo_prefix "$script" > "$destination" ;;
       template) ;&
       yes) $sudo_prefix "$1" > "$destination" ;;
       modify)
