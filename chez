@@ -1263,7 +1263,8 @@ function ensure_repository_exists()
      touch Files/.gitkeep Groups/.gitkeep
      git init
      echo "Chez v0.1 source repository" > .git/description
-     git add Files/.gitkeep Groups/.gitkeep
+     echo ".chezstate.db" > .gitignore
+     git add Files/.gitkeep Groups/.gitkeep .gitignore
      git commit -m "Initiating repository")
   fi
 }
