@@ -1533,6 +1533,7 @@ function add_file_to_repository()
      [[ "$automatic_permissions" == "yes" ]]; then
     local path="${REPOSITORY_DIR}/Files$(system_to_repository "$1")"
     echo "/${path##*/} permission=$(stat -c "%a" "$1")" >> "${path%/*}/.gitattributes"
+    git -C "${REPOSITORY_DIR}" add "${path%/*}/.gitattributes"
   fi
 
   return 0
