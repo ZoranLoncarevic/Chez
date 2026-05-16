@@ -42,6 +42,44 @@ function invoke_pager_if_on_terminal()
   fi
 }
 
+KV_DB="${REPOSITORY_DIR}/.chezstate.db"
+[[ -e "$KV_DB" ]] &&
+  KV_STORE_EXIST="yes" ||
+  KV_STORE_EXIST=""
+
+function ensure_kv_store_exists()
+{
+  if [[ -z "$KV_STORE_EXIST" ]]; then
+    [[ -e "$KV_DB" ]] ||
+    sqlite3 "$KV_DB" "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);"
+    KV_STORE_EXIST="yes"
+  fi
+}
+
+function kv-set()
+{
+  ensure_kv_store_exists
+  sqlite3 "$KV_DB" "INSERT INTO kv (key, value) VALUES ('$1', '$2') ON CONFLICT(key) DO UPDATE SET value=excluded.value;"
+}
+
+function kv-get()
+{
+  ensure_kv_store_exists
+  sqlite3 "$KV_DB" "SELECT value FROM kv WHERE key='$1';"
+}
+
+function kv-del()
+{
+  ensure_kv_store_exists
+  sqlite3 "$KV_DB" "DELETE FROM kv WHERE key='$1';"
+}
+
+function kv-list()
+{
+  ensure_kv_store_exists
+  sqlite3 "$KV_DB" "SELECT key, value FROM kv;"
+}
+
 function save_options()
 {
   local option_var
@@ -93,6 +131,7 @@ function repository_to_system()
   local part2=${system##*/}
   part2=${part2#exec_modify_}
   part2=${part2#exec_no-output_}
+  part2=${part2#exec_once_}
   part2=${part2#exec_literal_}
   part2=${part2#exec_}
   part2=${part2#link_}
@@ -125,6 +164,8 @@ function slurp_options_from_filename()
       option_exec="modify"    ;;
     exec_no-output_*)
       option_exec="no-output" ;;
+    exec_once_*)
+      option_exec="once"      ;;
     exec_*)
       option_exec="yes"       ;;
     template_run_*)
@@ -281,6 +322,7 @@ function diff_single_pair()
   fi
   if [[ -n "$option_exec" ]]; then
     [[ "$option_exec" == "no-output" ]] && return 0
+    [[ "$option_exec" == "once" ]]      && return 0
     local mode=$script_mode
     if [[ "$option_exec" == "template" && -n "$template_mode" ]]; then
       mode=$template_mode
@@ -1015,6 +1057,14 @@ function apply_single_file()
 	else
 	  $sudo_prefix "$1" < /dev/null > "$destination"
 	fi ;;
+      once)
+	local new_sha1=$(sha1sum "$1")
+	new_sha1=${new_sha1%% *}
+	local old_sha1=$(kv-get "$1")
+	if [[ "$new_sha1" != "$old_sha1" ]]; then
+	  kv-set "$1" "$new_sha1"
+	  $sudo_prefix "$1"
+	fi ;;
       no-output) $sudo_prefix "$1" ;;
       *) perror "$option_exec: unknown exec option" non-fatal
 	 return 1
@@ -1105,6 +1155,8 @@ function command_apply()
 
   local filter_value_plus="yes"
   local filter_value_minus=""
+
+  ensure_kv_store_exists
 
   shift
   while [[ $# -gt 0 ]]; do
