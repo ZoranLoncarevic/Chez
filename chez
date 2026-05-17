@@ -768,6 +768,79 @@ function command_edit()
   exit
 }
 
+function command_init()
+{
+  if [[ ! -e "${REPOSITORY_DIR}" ]]; then
+    mkdir -p "${REPOSITORY_DIR}" ||
+      perror "Error creating repository directory $REPOSITORY_DIR"
+  elif [[ ! -d "${REPOSITORY_DIR}" ]]; then
+    perror "${REPOSITORY_DIR}: not a directory"
+  elif [[ -n "$(ls -A "${REPOSITORY_DIR}")" ]]; then
+    perror "${REPOSITORY_DIR} is not empty"
+  fi
+
+  local option_apply=""
+  local option_branch=""
+  local git_depth=""
+  local repository=""
+  local repository_url=""
+
+  shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -a|--apply)
+	option_apply="yes" ;;
+      -b|--branch)
+	shift
+	option_branch="$1" ;;
+      -d|--depth)
+	shift
+	git_depth="$1"  ;;
+      *)
+	if [[ -z "$repository" ]]; then
+	  repository="$1"
+	else
+	  perror "Too many arguments."
+	fi
+    esac
+    shift
+  done
+
+  if [[ -z "$repository" ]]; then
+    ensure_repository_exists
+    exit
+  fi
+
+  case "$repository" in
+    http:*) ;&
+    https:*)
+      repository_url="$repository" ;;
+    */*/*)
+      # local repository
+      repository_url="$repository" ;;
+    */*)
+      # github repository
+      local username=${repository%%/*}
+      local repo_name=${repository#*/}
+      repository_url="https://${username}@github.com/${username}/${repo_name}" ;;
+    *)
+      repository_url="https://$repository@github.com/$repository/dotfiles"
+  esac
+
+  local git_arguments=()
+  [[ -n "$option_branch" ]] &&
+    git_arguments+=("-b" "$option_branch")
+  [[ -n "$git_depth" ]] &&
+    git_arguments+=("--depth" "$git_depth")
+  git clone "${git_arguments[@]}" "$repository_url" "${REPOSITORY_DIR}" ||
+    exit
+
+  if [[ -n "$option_apply" ]]; then
+    command_apply
+  fi
+  exit
+}
+
 function command_git()
 {
   git -C "${REPOSITORY_DIR}" "$@"
@@ -1767,6 +1840,8 @@ while [[ $# -gt 0 ]]; do
       command_ls-files "$@" ;;
     edit)
       command_edit "$@"     ;;
+    init)
+      command_init "$@"     ;;
     *) perror_unknown_option_or_command "$1" ;;
   esac
   shift
