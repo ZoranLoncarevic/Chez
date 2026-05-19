@@ -449,7 +449,7 @@ function command_diff()
 	did_some_paths="yes"
 	if [[ "$path" == "$REPOSITORY_DIR/Groups/"* ]]; then
 	  if [[ -d "$path" ]]; then
-	    for_each_found_file_with_options_slurped_do diff_single_pair "$path" -type l -exec readlink -z -f {} +
+	    for_each_found_file_with_options_slurped_do diff_single_pair "$path" -type l -exec readlink -f {} +
 	  elif [[ -h "$path" ]]; then
 	    for_each_found_file_with_options_slurped_do diff_single_pair "$(realpath -- $path)"
 	  fi
