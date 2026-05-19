@@ -369,10 +369,16 @@ function diff_single_pair()
     local rep_regex=${REPOSITORY_DIR#/}
     rep_regex=${rep_regex//\//\\\/}
     if [[ -z "$option_link" ]]; then
-      git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$repository"
+      if git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$repository"; then
+	[[ -n "$option_verbose" ]] &&
+	  echo "$system and Repository are the same"
+      fi
     else
-      git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- - "$repository" <<< \
-	       "$(readlink "$system" || echo '[Not a symbolic link]')"
+      if git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- - "$repository" <<< \
+	          "$(readlink "$system" || echo '[Not a symbolic link]')"; then
+        [[ -n "$option_verbose" ]] &&
+	  echo "$system and Repository are the same"
+      fi
     fi |
     sed '/^\(\o033\[1m\)\?diff --git/s| '"$rep_regex"'\/Files\/[^\o033]*||
 	 /^\(\o033\[1m\)\?diff --git/s|\(diff --git [^ ]*\) [^\o033]*|\1|
@@ -412,6 +418,7 @@ function command_diff()
   local template_mode=""
   local script_mode="none"
   local option_all=""
+  local option_verbose=""
 
   local color="auto"
   [[ "$connected_to_terminal" == "yes" ]] && color="always"
@@ -440,6 +447,8 @@ function command_diff()
 	script_mode="output"        ;;
       -a|--all)
 	option_all="yes"            ;;
+      -v|--verbose)
+	option_verbose="yes"        ;;
       *)
 	local path=$(get_cli_arg_as_repository_path "$1")
 	if [[ ! -e "$path" ]]; then
