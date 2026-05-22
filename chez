@@ -353,7 +353,12 @@ function diff_single_pair()
 
   if [[ "$status_not_diff" == "yes" ]]; then
     if [[ -z "$option_link" ]]; then
-      git diff --quiet --no-index -- "$system" "$repository" ||
+      if [[ -h "$system" && "$option_follow_link" == "yes" ]]; then
+	local f_system="$(readlink -f "$system")"
+      else
+	local f_system="$system"
+      fi
+      git diff --quiet --no-index -- "$f_system" "$repository" ||
         echo -e "\e[0;31mM\e[m $system"
     else
       if [[ -h "$system" ]]; then
@@ -369,7 +374,12 @@ function diff_single_pair()
     local rep_regex=${REPOSITORY_DIR#/}
     rep_regex=${rep_regex//\//\\\/}
     if [[ -z "$option_link" ]]; then
-      if git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$system" "$repository"; then
+      if [[ -h "$system" && "$option_follow_link" == "yes" ]]; then
+	local f_system="$(readlink -f "$system")"
+      else
+	local f_system="$system"
+      fi
+      if git diff "${diff_options[@]}" --no-index --no-prefix --color=$color -- "$f_system" "$repository"; then
 	[[ -n "$option_verbose" ]] &&
 	  echo "$system and Repository are the same"
       fi
@@ -449,6 +459,8 @@ function command_diff()
 	option_all="yes"            ;;
       -v|--verbose)
 	option_verbose="yes"        ;;
+      -L|--follow-link)
+	option_follow_link="yes"    ;;
       *)
 	local path=$(get_cli_arg_as_repository_path "$1")
 	if [[ ! -e "$path" ]]; then
