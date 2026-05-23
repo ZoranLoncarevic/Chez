@@ -1430,6 +1430,8 @@ function link_file_into_the_group()
       ln -srfn "${REPOSITORY_DIR}/Files$1" "$link_name"
     }
   fi
+  is_this_a_dry_run ||
+    git -C "${REPOSITORY_DIR}" add "$link_name"
 }
 
 function make_space_for_another_group()
