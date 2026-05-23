@@ -955,6 +955,7 @@ function command_chattr()
   local line attribute file
   shift
 
+  set -x
   # Collect attributes and files from command line
   local attributes=()
   local files=()
@@ -982,7 +983,7 @@ function command_chattr()
 
     if [[ "$path" == "$REPOSITORY_DIR/Groups/"* ]]; then
       if [[ -h "$path" ]]; then
-	path="$(realpath -- $path)"
+	path="$(realpath -- "$path")"
       else
 	perror "${path/#$REPOSITORY_DIR\/Groups\//:}: can't set attribute"
 	return 1
