@@ -1713,6 +1713,7 @@ function command_add()
   local option_sudo=""
   local option_deferred=""
   local automatic_permissions=""
+  local read_paths_from_stdin=""
   local group=""
   local success_cnt=0 failure_cnt=0
 
@@ -1739,6 +1740,8 @@ function command_add()
       option_dry_run="yes"
     elif [[ "$1" == "--defer" ]]; then
       option_deferred="yes"
+    elif [[ "$1" == "--stdin" ]]; then
+      read_paths_from_stdin="yes"
     elif [[ "$1" == "-g" || "$1" == "--group" ]]; then
       shift
       if [[ -z "$1" || "$1" == -* ]]; then
@@ -1753,6 +1756,12 @@ function command_add()
     fi
     shift
   done
+
+  if [[ -n "$read_paths_from_stdin" ]]; then
+    while IFS= read -r file; do
+      add_single_path "$file" && (( ++success_cnt )) || (( ++failure_cnt ))
+    done
+  fi
 
   if (( $success_cnt == 0 )) && (( $failure_cnt == 0 )); then
     perror "no path specified!"
@@ -1785,6 +1794,7 @@ function command_add_check_options()
       --defer)  ;&
       --permission) ;&
       --store-link|--link) ;&
+      --stdin)  ;&
       -L|--follow-link) : ;;
       *)
         if [[ "$1" == -* ]]; then
